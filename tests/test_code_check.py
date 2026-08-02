@@ -241,6 +241,24 @@ def test_unknown_sympy_symbol_is_a_warning_not_a_failure(kb_root: Path) -> None:
     assert any("mystery_term" in w for w in entry["warnings"])
 
 
+def test_equation_number_in_comments_issues_warning(kb_root: Path) -> None:
+    _seed_symbols(kb_root)
+    rel = _write_code(
+        kb_root,
+        "equations/paper_ref.sympy",
+        "# GMM weight update (equation 7)\nEq(z, x_i)\n",
+    )
+    _upsert(
+        kb_root,
+        "Equation",
+        _prov({"id": "paper-ref-eq", "code_language": "sympy", "code_path": rel}),
+    )
+
+    entry = _by_ref(_check(kb_root))["Equation:paper-ref-eq"]
+    assert entry["status"] == STATUS_OK
+    assert any("paper-specific equation reference" in w for w in entry["warnings"])
+
+
 def test_malformed_sympy_expression_is_failed(kb_root: Path) -> None:
     _seed_symbols(kb_root)
     rel = _write_code(kb_root, "equations/bad.sympy", "Eq(z, x_i +\n")

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -431,6 +432,25 @@ def _run_ruff(path: Path) -> tuple[list[str], bool]:
     return findings, True
 
 
+_EQUATION_COMMENT_RE = re.compile(
+    r"#.*?\b(?:eq|equation)\.?\s*\(?\d+[a-z]?\)?", re.IGNORECASE
+)
+
+
+def _check_comment_equation_refs(source: str) -> list[str]:
+    """Warn if snippet comments contain paper-specific equation references."""
+    for line in source.splitlines():
+        if "#" in line:
+            comment_part = line[line.find("#") :]
+            if _EQUATION_COMMENT_RE.search(comment_part):
+                return [
+                    "snippet comment contains paper-specific equation reference; "
+                    "paper equation numbers belong on the Equation graph node property/summary, "
+                    "not in code snippet comments"
+                ]
+    return []
+
+
 # --- orchestration -----------------------------------------------------------
 
 
@@ -493,6 +513,9 @@ def check_node(
     source = path.read_text(encoding="utf-8")
     code_hash = content_hash(source)
     language = _language_for(node, path)
+
+    if language in (LANGUAGE_PYTHON, LANGUAGE_SYMPY):
+        warnings.extend(_check_comment_equation_refs(source))
 
     if language == LANGUAGE_PYTHON:
         checkers.append("ast")

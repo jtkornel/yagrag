@@ -33,7 +33,9 @@ If the type you want to attach code to is not statically checkable, that is a **
 2.  **Write the Snippet**: Create a file under the `code/` directory of the knowledge base.
     *   For **SymPy**: Use a `.sympy` extension. Write one relation per line (e.g., `Eq(y, x + 1)`). Reuse symbols already present on symbol-bearing nodes in the graph.
     *   For **Python**: Use a `.py` extension. Target Python 3.11 + NumPy. Define a module-level function with type annotations.
-    *   Conventional layout: `code/equations/*.sympy`, `code/algorithms/*.py`, `code/models/*.py`, with a file slug matching the node id.
+    *   Conventional layout:
+        *   **Canonical domain expressions**: `code/equations/<slug>.sympy`, `code/algorithms/<slug>.py` (truly universal domain models shared across documents).
+        *   **Document-specific snippets**: `code/equations/<doc_id>/<slug>.sympy`, `code/algorithms/<doc_id>/<slug>.py` (or `code/equations/<doc_id>_<slug>.sympy`), isolating document-specific or special-purpose snippets on disk to prevent name collisions across paper ingestions.
 3.  **Set the Entry Point**: Decide on the `code_entry`. This is the function name for Python snippets or the name of the primary relation for SymPy snippets.
 4.  **Upsert the Node**: Run `kb graph upsert-node <Label> --props '...'` including the code properties: `code_language`, `code_path` (relative to KB root), and `code_entry`.
 5.  **Check the Code**: Run `kb code check --label <Label> --id <ID>` (add `--lint` for Python) to perform static analysis.
@@ -47,6 +49,8 @@ If the type you want to attach code to is not statically checkable, that is a **
 *   **Symbol Consistency**: In SymPy snippets, prefer symbols that match the `symbol`, `id` or `name` of a symbol-bearing node. An unrecognised symbol is reported as a *warning* only — if the symbol is legitimate, either accept the warning or add the missing symbol-bearing node.
 *   **Only Parse Errors Fail**: `failed` means a missing file, a `code_path` outside the KB, or a genuine parse/syntax error. Unknown symbols and lint findings never flip the status; an unrecognised `code_language` yields `unchecked`.
 *   **No Side Effects**: Python snippets must not perform I/O, networking, or top-level side effects. They should be pure functions.
+*   **Namespacing & Disk Collision**: Use document/source namespacing for document-specific or special-purpose snippets (e.g., `code/equations/raw-0001/motion_model.sympy`). Reserve top-level files under `code/equations/` and `code/algorithms/` for canonical, cross-document domain expressions.
+*   **No Paper Equation Numbers in Comments**: Snippet comments must focus strictly on mathematical and physical meaning (symbol definitions, physical assumptions). Do NOT include paper-specific equation numbers (e.g., `# equation (7)` or `# Eq. 1a`) in snippet comments. Preserve paper equation numbers as properties on the `Equation` graph node (e.g., in its `summary` or properties), and represent inter-equation relationships at the graph level using edges (`DERIVED_FROM`, `DEFINES`, `RELATES_TO`).
 *   **Failed Checks are Data**: A `failed` status does not block a write. Record the failure, and either fix the snippet or proceed if the extraction is still valuable.
 *   **Refresh on Edit**: If you manually edit a file in the `code/` directory, you must re-run `kb code check` to update the `code_hash` and status, otherwise it will be flagged as `stale`.
 *   **No Execution**: The checker only performs static analysis (parsing and symbol resolution). Do not rely on the code being executed.

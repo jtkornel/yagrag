@@ -22,7 +22,7 @@ Trigger this skill when:
     *   **Academic**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`.
 3.  **Upsert Nodes**: For each entity, run `kb graph upsert-node <Label> --props '...'`. 
     *   **Crucial**: Every node MUST include `origin: "raw"` and `sources: ["<doc_id>"]`.
-    *   **Code Representation**: For nodes supporting it (e.g., `Equation`, `Algorithm`), write the checkable snippet to the `code/` directory and run `kb code check` after upserting. Refer to the `code-representation` skill for the formal specification.
+    *   **Code Representation**: For nodes supporting it (e.g., `Equation`, `Algorithm`), write the checkable snippet to the `code/` directory (using document/source namespacing for paper-specific snippets, e.g., `code/equations/<doc_id>/<slug>.sympy` and `code/algorithms/<doc_id>/<slug>.py`) and run `kb code check` after upserting. Refer to the `code-representation` skill for the formal specification. Do NOT include paper equation numbers in snippet comments; store paper equation references in the node's `summary` or properties.
     *   Use the `summary` field to capture a brief definition of the entity as used in the document.
 4.  **Extract Claims**: Identify specific assertions with a truth value or quantitative result (e.g., "Method X achieves 2.1% drift").
     *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'`.
