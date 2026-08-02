@@ -69,6 +69,7 @@ class DocumentRecord:
     sources: tuple[str, ...] = ()  # source doc ids (synthesized only)
     tags: tuple[str, ...] = ()
     notes: str = ""
+    url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +83,7 @@ class DocumentRecord:
             "sources": list(self.sources),
             "tags": list(self.tags),
             "notes": self.notes,
+            "url": self.url,
         }
 
     @classmethod
@@ -97,6 +99,7 @@ class DocumentRecord:
             sources=tuple(d.get("sources", [])),
             tags=tuple(d.get("tags", [])),
             notes=d.get("notes", ""),
+            url=d.get("url", ""),
         )
 
 
@@ -180,6 +183,7 @@ class DocumentStore:
         sources: list[str] | None = None,
         tags: list[str] | None = None,
         notes: str = "",
+        url: str = "",
     ) -> DocumentRecord:
         """Ingest `source` as a document of `kind`. Returns the new record.
 
@@ -236,6 +240,7 @@ class DocumentStore:
             sources=tuple(sources),
             tags=tuple(tags or []),
             notes=notes,
+            url=url,
         )
         # Sidecar metadata next to the stored file (self-describing tree).
         meta_path = dest.with_name(dest.name + ".meta.json")

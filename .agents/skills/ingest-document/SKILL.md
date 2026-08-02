@@ -19,9 +19,10 @@ Trigger this skill when:
     *   `--title T`: A human-readable title.
     *   `--tag T`: Useful keywords for grouping (repeatable).
     *   `--notes N`: Any specific context about the acquisition of the document.
+    *   `--url U`: Source URL if downloaded from the web.
 3.  **Capture ID**: The CLI will return a unique document ID (e.g., `raw-0001`). You must record this ID; it is the primary key for all graph entities derived from this document.
 4.  **Verify Content**: Run `kb doc text <id>` to ensure the text was extracted correctly. If the text is empty or garbled, the ingest failed. Run `kb doc show <id>` to check metadata.
-5.  **Create Graph Node**: Every document in the store must have a corresponding `Document` node in the graph for relationship mapping. Run `kb graph upsert-node Document --props '{"id": "<id>", "name": "<title>", "origin": "raw", "sources": ["<id>"], "path": "<file_path>", "format": "<ext>"}'`.
+5.  **Graph Node Creation**: If the graph database exists, `kb doc add` automatically upserts the corresponding `Document` node in Kuzu DB. You can also explicitly verify or update properties via `kb graph upsert-node Document --props '...'`.
 6.  **Check for Duplicates**: Run `kb doc list` to see if a document with the same title or path already exists to avoid redundant extractions.
 7.  **Hand off**: Proceed to `deep-knowledge-extraction` to pull out the domain entities.
 

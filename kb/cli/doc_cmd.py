@@ -60,6 +60,7 @@ def cmd_add(
     ),
     tag: List[str] = typer.Option([], "--tag", help="Tag (repeatable)."),  # noqa: UP006
     notes: str = typer.Option("", "--notes"),
+    url: str = typer.Option("", "--url", help="Origin URL of the document."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
@@ -75,10 +76,35 @@ def cmd_add(
             sources=list(source),
             tags=list(tag),
             notes=notes,
+            url=url,
         )
     except StoreError as exc:
         _fail(str(exc), json_output)
         return
+
+    # Automatically upsert Document node in graph if graph database exists
+    cfg = KBConfig.load(kb)
+    db_path = kb / cfg.paths.graph_db
+    if db_path.exists():
+        try:
+            from ..graph.connection import open_graph
+            from ..graph.upsert import upsert_node
+            with open_graph(db_path) as g:
+                props: dict = {
+                    "id": rec.id,
+                    "name": rec.title,
+                    "kind": rec.kind,
+                    "path": rec.path,
+                    "format": rec.format,
+                    "origin": rec.kind,
+                    "sources": [rec.id],
+                }
+                if rec.url:
+                    props["url"] = rec.url
+                upsert_node(g, "Document", props)
+        except Exception:
+            pass  # Do not block store creation if graph DB is uninitialized or fails
+
     if json_output:
         typer.echo(_json.dumps(rec.to_dict(), indent=2))
     else:

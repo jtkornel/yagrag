@@ -138,6 +138,18 @@ def test_doc_add_list_show_cli(kb_dir: Path, sample_md: Path) -> None:
     assert json.loads(result.output)["title"] == "note"
 
 
+def test_doc_add_with_url_cli(kb_dir: Path, sample_md: Path) -> None:
+    url = "https://example.com/paper.pdf"
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--url", url, "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    rec = json.loads(result.output)
+    assert rec["id"] == "raw-0001"
+    assert rec["url"] == url
+
+
 def test_doc_add_duplicate_cli_nonzero(kb_dir: Path, sample_md: Path) -> None:
     args = ["doc", "add", str(sample_md), "--kind", "raw", "--kb", str(kb_dir), "--json"]
     assert runner.invoke(app, args).exit_code == 0
