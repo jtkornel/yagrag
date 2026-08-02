@@ -204,6 +204,16 @@ def test_schema_show_cli(kb_dir: Path) -> None:
     assert "Claim" in schema.node_type_names()
 
 
+def test_schema_show_type_filter_cli(kb_dir: Path) -> None:
+    _write_migration(kb_dir, INIT_MIGRATION)
+    result = runner.invoke(app, ["schema", "show", "-t", "Concept", "--kb", str(kb_dir), "--json"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data["node_types"]) == 1
+    assert data["node_types"][0]["name"] == "Concept"
+    assert len(data["relation_types"]) == 0
+
+
 def test_schema_migrate_scaffolds_file(kb_dir: Path) -> None:
     result = runner.invoke(
         app, ["schema", "migrate", "add_noise_model", "--kb", str(kb_dir), "--json"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -71,7 +72,13 @@ _JSON_OPT = typer.Option(False, "--json", help="Emit JSON output.")
 
 
 @schema_app.command("show")
-def cmd_show(kb: Path = _KB_OPT, json_output: bool = _JSON_OPT) -> None:
+def cmd_show(
+    type_name: Optional[str] = typer.Option(  # noqa: UP007
+        None, "--type", "-t", help="Filter by node or relation type name (case-insensitive)."
+    ),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
     """Show the target schema declared by all migrations on disk."""
     config = _load_config(kb, json_output)
     try:
@@ -79,17 +86,40 @@ def cmd_show(kb: Path = _KB_OPT, json_output: bool = _JSON_OPT) -> None:
     except MigrationError as exc:
         _fail(str(exc), json_output)
         return
+
+    node_types = schema.node_types
+    relation_types = schema.relation_types
+
+    if type_name:
+        target = type_name.strip().lower()
+        node_types = [nt for nt in node_types if nt.name.lower() == target]
+        relation_types = [rt for rt in relation_types if rt.name.lower() == target]
+        if not node_types and not relation_types:
+            _fail(f"unknown node or relation type {type_name!r}", json_output)
+            return
+
     if json_output:
-        typer.echo(schema.model_dump_json(indent=2, by_alias=True))
+        if type_name:
+            out = {
+                "node_types": [nt.model_dump(by_alias=True) for nt in node_types],
+                "relation_types": [rt.model_dump(by_alias=True) for rt in relation_types],
+            }
+            typer.echo(_json.dumps(out, indent=2))
+        else:
+            typer.echo(schema.model_dump_json(indent=2, by_alias=True))
         return
-    _console.print(f"[bold]Node types[/bold] ({len(schema.node_types)}):")
-    for nt in schema.node_types:
-        props = ", ".join(p.name for p in nt.effective_properties())
-        _console.print(f"  {nt.name}: {props}")
-    _console.print(f"[bold]Relation types[/bold] ({len(schema.relation_types)}):")
-    for rt in schema.relation_types:
-        pairs = ", ".join(f"{p.from_}->{p.to}" for p in rt.pairs)
-        _console.print(f"  {rt.name}: {pairs}")
+
+    if node_types:
+        _console.print(f"[bold]Node types[/bold] ({len(node_types)}):")
+        for nt in node_types:
+            props = ", ".join(p.name for p in nt.effective_properties())
+            _console.print(f"  {nt.name}: {props}")
+
+    if relation_types:
+        _console.print(f"[bold]Relation types[/bold] ({len(relation_types)}):")
+        for rt in relation_types:
+            pairs = ", ".join(f"{p.from_}->{p.to}" for p in rt.pairs)
+            _console.print(f"  {rt.name}: {pairs}")
 
 
 @schema_app.command("validate")
