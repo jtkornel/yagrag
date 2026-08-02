@@ -2,7 +2,7 @@
 # Worked example: capture one paper's *internals* as structured knowledge.
 #
 # This script performs, by hand, exactly what the agent skills in
-# `.junie/skills/` prescribe — ingest, deep knowledge extraction (entities +
+# `.agents/skills/` prescribe — ingest, deep knowledge extraction (entities +
 # reified claims), index, search — but with the LLM reasoning already "frozen"
 # into the literal commands below. It is therefore both documentation and an
 # executable end-to-end smoke test (see `tests/test_e2e_smoke.py`).

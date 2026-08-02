@@ -1,4 +1,4 @@
-# graphrag_knowledge_base
+# yagrag - Yet Another GraphRAG knowledge base
 
 A **lightweight, local-first GraphRAG system** for building and maintaining
 *domain-specific property-graph databases and document collections*.
@@ -7,7 +7,7 @@ The system is split in two:
 
 - **A deterministic CLI (`kb`)** — implemented in Python, performs all
   document-store and graph-database operations. **No LLM calls inside the CLI.**
-- **An agent layer** — a set of `.md` skill files (in `.junie/skills/`) that tell
+- **An agent layer** — a set of agent skills (in `.agents/skills/`) that tell
   an LLM agent *how* to interview the user, model the domain, ingest and analyse
   documents, evolve the schema, update the graph, synthesize documents, and
   answer questions — always by invoking the deterministic CLI.
@@ -84,11 +84,25 @@ The central architectural boundary is *deterministic CLI, LLM reasoning in the a
 - The CLI is fully scriptable and testable offline.
 - All reasoning lives in the agent: interviewing the user, deciding what entities exist, extraction,
   schema proposals, synthesis, and answering questions.
-- The agent is guided by the markdown skills in `.junie/skills/` and acts only by invoking the CLI.
+- The agent is guided by the markdown skills in `.agents/skills/` and acts only by invoking the CLI.
 
 Benefits: the tool is harness-agnostic, deterministic, unit-testable, and the “intelligence” is swappable.
 
 ### Agent skills
+
+The skills live in **`.agents/skills/`**, one folder per skill holding a `SKILL.md` in the open
+[Agent Skills](https://agentskills.io) format:
+
+```
+.agents/skills/
+  domain-modeling/SKILL.md
+  ingest-document/SKILL.md
+  ...
+```
+
+That location is deliberately vendor-neutral rather than tied to one harness (`.junie/skills/`,
+`.claude/skills/`, `.cursor/skills/`, …), so any agent supporting the format discovers them with no
+per-tool configuration. If your agent only scans its own directory, symlink or copy the folder there.
 
 | Skill | Use it when |
 |---|---|
@@ -107,21 +121,24 @@ Benefits: the tool is harness-agnostic, deterministic, unit-testable, and the �
 **Wikidata, not Wikipedia**: the goal is a graph of structured facts *inside* documents — not a fuzzy
 “what this paper is about” summary.
 
-The seed schema in `schema/migrations/0001_seed_domain.json` defines **29 node types** and **28 relation types**.
+The seed schema in `schema/migrations/0001_seed_domain.json` defines **29 node types** and **28 relation types**,
+organised in **three layers**. The first two are generic and reusable in any research field; the third is
+domain-specific and meant to be replaced when you model a different domain.
 
 - **Layer 1: document/bibliographic layer** (general, reusable across research fields)
   - Node types: `Document`, `Author`, `Venue`
   - Relation types: `CITES`, `AUTHORED_BY`, `PUBLISHED_IN`, `DERIVED_FROM`, `MENTIONS`, `DEFINES`, `SUPPORTS`, `CONTRADICTS`
 
-- **Layer 2: deep domain knowledge** (models internals of sensor fusion / factor graphs / UGV navigation)
+- **Layer 2: reified claim layer** (general, reusable across research fields)
+  - Node types: `Claim` — a claim is its own node, carrying subject–predicate–object, qualifiers, confidence and sources as properties.
+  - Relation types: `ABOUT`/`HAS_OBJECT` link a claim to its subject and object, which may be a node from any layer; documents attach via `SUPPORTS`/`CONTRADICTS`.
+  - It sits *above* the entity layers: it says who asserts what about the entities they contain, rather than
+    adding domain entities of its own, so swapping the domain layer leaves it unchanged.
+  - This makes conflicting assertions from different sources coexist with full provenance instead of being flattened.
+
+- **Layer 3: deep domain knowledge** (models internals of sensor fusion / factor graphs / UGV navigation)
   - Node types: `FactorGraph`, `Variable`, `Factor`, `StateEstimator`, `MotionModel`, `SensorModel`, `NoiseModel`, `Sensor`, `Solver`, `Equation`, `Quantity`, `Assumption`, `CoordinateFrame`, `Robot`, `Task`, `Dataset`, `Metric`, `Tool` and others
   - Relation types: wired by `HAS_VARIABLE`, `HAS_FACTOR`, `CONNECTS`, `ESTIMATES`, `MEASURES`, `ASSUMES`, `SOLVED_BY`, `DEFINED_BY`, `EVALUATED_ON`, `EXPRESSED_IN`, `HAS_NOISE` and others
-
-- **Reified `Claim` layer**
-  - A claim is its own node (subject–predicate–object, plus qualifiers, confidence, sources).
-  - Claims are linked by `ABOUT`/`HAS_OBJECT`.
-  - Documents attach via `SUPPORTS`/`CONTRADICTS`.
-  - This makes conflicting assertions from different sources coexist with full provenance instead of being flattened.
 
 Key point: a mere document summary is a failed extraction — the goal is the structured knowledge held
 *inside* documents.
