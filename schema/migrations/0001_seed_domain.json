@@ -1,0 +1,314 @@
+{
+  "id": "0001_seed_domain",
+  "description": "Seed schema: document/bibliographic layer + deep sensor-fusion/factor-graph/UGV domain layer + reified Claim pattern. All node/rel tables carry common provenance properties (id, name, summary, origin, sources, confidence, created_at, updated_at). Node types that should hold statically checked snippets declare the full static-check property set (code_language, code_path, code_entry, code_status, code_checked_at, code_checker, code_hash); node types that name a mathematical symbol declare `symbol`.",
+  "operations": [
+    { "op": "create_node_table", "table": { "name": "Document", "properties": [
+      { "name": "kind", "type": "STRING" },
+      { "name": "path", "type": "STRING" },
+      { "name": "format", "type": "STRING" },
+      { "name": "year", "type": "INT64" },
+      { "name": "url", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Author" } },
+    { "op": "create_node_table", "table": { "name": "Venue" } },
+
+    { "op": "create_node_table", "table": { "name": "Concept" } },
+    { "op": "create_node_table", "table": { "name": "Method", "properties": [
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Algorithm", "properties": [
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Model" } },
+    { "op": "create_node_table", "table": { "name": "Assumption" } },
+    { "op": "create_node_table", "table": { "name": "Equation", "properties": [
+      { "name": "latex", "type": "STRING" },
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Quantity", "properties": [
+      { "name": "symbol", "type": "STRING" },
+      { "name": "unit", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Metric" } },
+    { "op": "create_node_table", "table": { "name": "Dataset" } },
+    { "op": "create_node_table", "table": { "name": "Tool" } },
+    { "op": "create_node_table", "table": { "name": "Application" } },
+    { "op": "create_node_table", "table": { "name": "System" } },
+
+    { "op": "create_node_table", "table": { "name": "FactorGraph" } },
+    { "op": "create_node_table", "table": { "name": "Variable", "properties": [
+      { "name": "symbol", "type": "STRING" },
+      { "name": "domain", "type": "STRING" },
+      { "name": "dimension", "type": "INT64" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Factor", "properties": [
+      { "name": "factor_type", "type": "STRING" },
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "StateEstimator" } },
+    { "op": "create_node_table", "table": { "name": "MotionModel", "properties": [
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "SensorModel", "properties": [
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Sensor", "properties": [
+      { "name": "modality", "type": "STRING" }
+    ] } },
+    { "op": "create_node_table", "table": { "name": "Solver" } },
+    { "op": "create_node_table", "table": { "name": "Constraint" } },
+    { "op": "create_node_table", "table": { "name": "CoordinateFrame" } },
+    { "op": "create_node_table", "table": { "name": "Robot" } },
+    { "op": "create_node_table", "table": { "name": "Task" } },
+    { "op": "create_node_table", "table": { "name": "NoiseModel", "properties": [
+      { "name": "code_language", "type": "STRING" },
+      { "name": "code_path", "type": "STRING" },
+      { "name": "code_entry", "type": "STRING" },
+      { "name": "code_status", "type": "STRING" },
+      { "name": "code_checked_at", "type": "STRING" },
+      { "name": "code_checker", "type": "STRING" },
+      { "name": "code_hash", "type": "STRING" }
+    ] } },
+
+    { "op": "create_node_table", "table": { "name": "Claim", "properties": [
+      { "name": "predicate", "type": "STRING" },
+      { "name": "object_literal", "type": "STRING" },
+      { "name": "qualifiers", "type": "STRING" }
+    ] } },
+
+    { "op": "create_rel_table", "table": { "name": "CITES", "pairs": [
+      { "from": "Document", "to": "Document" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "AUTHORED_BY", "pairs": [
+      { "from": "Document", "to": "Author" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "PUBLISHED_IN", "pairs": [
+      { "from": "Document", "to": "Venue" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "DERIVED_FROM", "pairs": [
+      { "from": "Document", "to": "Document" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "MENTIONS", "pairs": [
+      { "from": "Document", "to": "Concept" },
+      { "from": "Document", "to": "Method" },
+      { "from": "Document", "to": "Algorithm" },
+      { "from": "Document", "to": "Model" },
+      { "from": "Document", "to": "FactorGraph" },
+      { "from": "Document", "to": "Variable" },
+      { "from": "Document", "to": "Factor" },
+      { "from": "Document", "to": "StateEstimator" },
+      { "from": "Document", "to": "MotionModel" },
+      { "from": "Document", "to": "SensorModel" },
+      { "from": "Document", "to": "Sensor" },
+      { "from": "Document", "to": "Solver" },
+      { "from": "Document", "to": "Dataset" },
+      { "from": "Document", "to": "Tool" },
+      { "from": "Document", "to": "Application" },
+      { "from": "Document", "to": "System" },
+      { "from": "Document", "to": "Robot" },
+      { "from": "Document", "to": "Task" },
+      { "from": "Document", "to": "Quantity" },
+      { "from": "Document", "to": "Metric" },
+      { "from": "Document", "to": "Equation" },
+      { "from": "Document", "to": "Assumption" },
+      { "from": "Document", "to": "NoiseModel" },
+      { "from": "Document", "to": "Constraint" },
+      { "from": "Document", "to": "CoordinateFrame" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "DEFINES", "pairs": [
+      { "from": "Document", "to": "Concept" },
+      { "from": "Document", "to": "Method" },
+      { "from": "Document", "to": "Algorithm" },
+      { "from": "Document", "to": "Model" },
+      { "from": "Document", "to": "FactorGraph" },
+      { "from": "Document", "to": "Equation" },
+      { "from": "Document", "to": "StateEstimator" },
+      { "from": "Document", "to": "SensorModel" },
+      { "from": "Document", "to": "MotionModel" },
+      { "from": "Document", "to": "NoiseModel" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "SUPPORTS", "pairs": [
+      { "from": "Document", "to": "Claim" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "CONTRADICTS", "pairs": [
+      { "from": "Document", "to": "Claim" }
+    ] } },
+
+    { "op": "create_rel_table", "table": { "name": "ABOUT", "pairs": [
+      { "from": "Claim", "to": "Concept" },
+      { "from": "Claim", "to": "Method" },
+      { "from": "Claim", "to": "Algorithm" },
+      { "from": "Claim", "to": "Model" },
+      { "from": "Claim", "to": "FactorGraph" },
+      { "from": "Claim", "to": "StateEstimator" },
+      { "from": "Claim", "to": "MotionModel" },
+      { "from": "Claim", "to": "SensorModel" },
+      { "from": "Claim", "to": "Sensor" },
+      { "from": "Claim", "to": "Solver" },
+      { "from": "Claim", "to": "Dataset" },
+      { "from": "Claim", "to": "Tool" },
+      { "from": "Claim", "to": "System" },
+      { "from": "Claim", "to": "Robot" },
+      { "from": "Claim", "to": "Task" },
+      { "from": "Claim", "to": "Application" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "HAS_OBJECT", "pairs": [
+      { "from": "Claim", "to": "Concept" },
+      { "from": "Claim", "to": "Method" },
+      { "from": "Claim", "to": "Algorithm" },
+      { "from": "Claim", "to": "Model" },
+      { "from": "Claim", "to": "FactorGraph" },
+      { "from": "Claim", "to": "StateEstimator" },
+      { "from": "Claim", "to": "MotionModel" },
+      { "from": "Claim", "to": "SensorModel" },
+      { "from": "Claim", "to": "Sensor" },
+      { "from": "Claim", "to": "Solver" },
+      { "from": "Claim", "to": "Dataset" },
+      { "from": "Claim", "to": "Metric" },
+      { "from": "Claim", "to": "Tool" },
+      { "from": "Claim", "to": "System" },
+      { "from": "Claim", "to": "Robot" },
+      { "from": "Claim", "to": "Task" },
+      { "from": "Claim", "to": "Application" }
+    ] } },
+
+    { "op": "create_rel_table", "table": { "name": "RELATES_TO", "pairs": [
+      { "from": "Concept", "to": "Concept" },
+      { "from": "Method", "to": "Concept" },
+      { "from": "Application", "to": "Concept" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "PART_OF", "pairs": [
+      { "from": "Concept", "to": "Concept" },
+      { "from": "Method", "to": "Method" },
+      { "from": "System", "to": "System" },
+      { "from": "Sensor", "to": "System" },
+      { "from": "Sensor", "to": "Robot" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "SPECIALIZES", "pairs": [
+      { "from": "Concept", "to": "Concept" },
+      { "from": "Method", "to": "Method" },
+      { "from": "Algorithm", "to": "Algorithm" },
+      { "from": "Model", "to": "Model" },
+      { "from": "StateEstimator", "to": "StateEstimator" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "USES", "pairs": [
+      { "from": "Method", "to": "Concept" },
+      { "from": "Method", "to": "Model" },
+      { "from": "Method", "to": "FactorGraph" },
+      { "from": "Algorithm", "to": "Concept" },
+      { "from": "StateEstimator", "to": "MotionModel" },
+      { "from": "StateEstimator", "to": "SensorModel" },
+      { "from": "StateEstimator", "to": "NoiseModel" },
+      { "from": "System", "to": "Sensor" },
+      { "from": "System", "to": "Tool" },
+      { "from": "Tool", "to": "Algorithm" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "IMPLEMENTS", "pairs": [
+      { "from": "Tool", "to": "Method" },
+      { "from": "Tool", "to": "Algorithm" },
+      { "from": "System", "to": "Method" },
+      { "from": "Algorithm", "to": "Method" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "APPLIES_TO", "pairs": [
+      { "from": "Method", "to": "Application" },
+      { "from": "Method", "to": "Task" },
+      { "from": "Algorithm", "to": "Task" },
+      { "from": "System", "to": "Application" },
+      { "from": "Robot", "to": "Task" }
+    ] } },
+
+    { "op": "create_rel_table", "table": { "name": "HAS_VARIABLE", "pairs": [
+      { "from": "FactorGraph", "to": "Variable" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "HAS_FACTOR", "pairs": [
+      { "from": "FactorGraph", "to": "Factor" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "CONNECTS", "pairs": [
+      { "from": "Factor", "to": "Variable" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "ESTIMATES", "pairs": [
+      { "from": "StateEstimator", "to": "Variable" },
+      { "from": "StateEstimator", "to": "Quantity" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "MEASURES", "pairs": [
+      { "from": "Sensor", "to": "Quantity" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "ASSUMES", "pairs": [
+      { "from": "Method", "to": "Assumption" },
+      { "from": "Model", "to": "Assumption" },
+      { "from": "MotionModel", "to": "Assumption" },
+      { "from": "SensorModel", "to": "Assumption" },
+      { "from": "StateEstimator", "to": "Assumption" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "OPTIMIZES", "pairs": [
+      { "from": "Solver", "to": "FactorGraph" },
+      { "from": "Solver", "to": "Equation" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "SOLVED_BY", "pairs": [
+      { "from": "FactorGraph", "to": "Solver" },
+      { "from": "Constraint", "to": "Solver" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "DEFINED_BY", "pairs": [
+      { "from": "Factor", "to": "Equation" },
+      { "from": "MotionModel", "to": "Equation" },
+      { "from": "SensorModel", "to": "Equation" },
+      { "from": "NoiseModel", "to": "Equation" },
+      { "from": "Quantity", "to": "Equation" },
+      { "from": "Constraint", "to": "Equation" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "EVALUATED_ON", "pairs": [
+      { "from": "Method", "to": "Dataset" },
+      { "from": "Method", "to": "Metric" },
+      { "from": "Algorithm", "to": "Dataset" },
+      { "from": "Algorithm", "to": "Metric" },
+      { "from": "System", "to": "Dataset" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "EXPRESSED_IN", "pairs": [
+      { "from": "Variable", "to": "CoordinateFrame" },
+      { "from": "Quantity", "to": "CoordinateFrame" },
+      { "from": "Sensor", "to": "CoordinateFrame" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "HAS_NOISE", "pairs": [
+      { "from": "Sensor", "to": "NoiseModel" },
+      { "from": "SensorModel", "to": "NoiseModel" },
+      { "from": "MotionModel", "to": "NoiseModel" },
+      { "from": "Factor", "to": "NoiseModel" }
+    ] } }
+  ]
+}
