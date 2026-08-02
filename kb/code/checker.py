@@ -357,6 +357,22 @@ def _expression_lines(source: str) -> list[str]:
     return lines
 
 
+_INDEX_SUFFIX_RE = re.compile(
+    r"(_(?:[a-z0-9]+|prev|next|hat|bar|tilde|star|prime|dot|ddot))+$",
+    re.IGNORECASE,
+)
+
+
+def _symbol_matches_allowed(sym: str, allowed: set[str]) -> bool:
+    if sym in allowed:
+        return True
+    stem = _INDEX_SUFFIX_RE.sub("", sym)
+    if stem in allowed:
+        return True
+    allowed_stems = {_INDEX_SUFFIX_RE.sub("", a) for a in allowed}
+    return stem in allowed_stems
+
+
 def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
     """Parse each expression and cross-check its free symbols."""
     try:
@@ -388,7 +404,7 @@ def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
         free.update(str(s) for s in getattr(expr, "free_symbols", set()))
 
     warnings: list[str] = []
-    unknown = sorted(s for s in free if s not in allowed)
+    unknown = sorted(s for s in free if not _symbol_matches_allowed(s, allowed))
     if unknown and allowed:
         warnings.append(
             "symbols not found on any symbol-bearing node in the graph: "
