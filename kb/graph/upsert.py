@@ -181,3 +181,111 @@ def upsert_claim(
             g, "HAS_OBJECT", "Claim", claim_id, object_label, object_id, edge_props
         )
     return {"id": claim_id, "subject": subject_id, "predicate": predicate}
+
+
+def _parse_ref(ref: str) -> tuple[str, str]:
+    if ":" not in ref:
+        raise GraphWriteError(f"invalid entity reference {ref!r} (expected 'Label:id')")
+    label, node_id = ref.split(":", 1)
+    return label.strip(), node_id.strip()
+
+
+def execute_batch(g: GraphDB, items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Execute a batch of graph operations (nodes, edges, claims)."""
+    counts = {"nodes": 0, "edges": 0, "claims": 0}
+    for idx, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            raise GraphWriteError(f"batch item #{idx} must be a JSON object")
+        op = item.get("op") or item.get("operation") or item.get("kind")
+        if not op:
+            raise GraphWriteError(f"batch item #{idx} missing 'op' field")
+        op = str(op).lower().replace("_", "-")
+
+        props = item.get("props", {})
+        if not isinstance(props, dict):
+            raise GraphWriteError(f"batch item #{idx} 'props' must be an object")
+
+        try:
+            if op in ("node", "upsert-node"):
+                label = item.get("label")
+                if not label:
+                    raise GraphWriteError("node op missing 'label'")
+                upsert_node(g, str(label), props)
+                counts["nodes"] += 1
+
+            elif op in ("edge", "upsert-edge"):
+                rel = item.get("rel") or item.get("relation")
+                if not rel:
+                    raise GraphWriteError("edge op missing 'rel'")
+                from_ref = item.get("from")
+                if from_ref and isinstance(from_ref, str):
+                    from_label, from_id = _parse_ref(from_ref)
+                else:
+                    from_label = str(item.get("from_label", ""))
+                    from_id = str(item.get("from_id", ""))
+
+                to_ref = item.get("to")
+                if to_ref and isinstance(to_ref, str):
+                    to_label, to_id = _parse_ref(to_ref)
+                else:
+                    to_label = str(item.get("to_label", ""))
+                    to_id = str(item.get("to_id", ""))
+
+                if not (from_label and from_id and to_label and to_id):
+                    raise GraphWriteError("edge op missing endpoints ('from' and 'to')")
+
+                upsert_edge(g, str(rel), from_label, from_id, to_label, to_id, props)
+                counts["edges"] += 1
+
+            elif op in ("claim", "upsert-claim"):
+                claim_id = item.get("id") or item.get("claim_id") or props.get("id")
+                if not claim_id:
+                    raise GraphWriteError("claim op missing 'id'")
+
+                subject_ref = item.get("subject")
+                if subject_ref and isinstance(subject_ref, str):
+                    subject_label, subject_id = _parse_ref(subject_ref)
+                else:
+                    subject_label = str(item.get("subject_label", ""))
+                    subject_id = str(item.get("subject_id", ""))
+
+                predicate = str(item.get("predicate", ""))
+                if not (subject_label and subject_id and predicate):
+                    raise GraphWriteError("claim op missing subject or predicate")
+
+                object_label: str | None = None
+                object_id: str | None = None
+                object_ref = item.get("object")
+                if object_ref and isinstance(object_ref, str):
+                    object_label, object_id = _parse_ref(object_ref)
+                elif item.get("object_label") and item.get("object_id"):
+                    object_label = str(item["object_label"])
+                    object_id = str(item["object_id"])
+
+                object_literal = item.get("object_literal")
+                if object_literal is not None:
+                    object_literal = str(object_literal)
+
+                upsert_claim(
+                    g,
+                    str(claim_id),
+                    subject_label,
+                    subject_id,
+                    predicate,
+                    props,
+                    object_label=object_label,
+                    object_id=object_id,
+                    object_literal=object_literal,
+                )
+                counts["claims"] += 1
+            else:
+                raise GraphWriteError(f"unknown batch operation {op!r}")
+        except (ProvenanceError, GraphWriteError, ValueError) as exc:
+            raise GraphWriteError(f"batch item #{idx} ({op}) failed: {exc}") from exc
+
+    return {
+        "nodes_upserted": counts["nodes"],
+        "edges_upserted": counts["edges"],
+        "claims_upserted": counts["claims"],
+        "total_operations": len(items),
+    }

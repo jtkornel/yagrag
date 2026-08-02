@@ -260,3 +260,53 @@ def test_graph_export(kb_dir: Path) -> None:
     assert "Concept" in payload["nodes"]
     assert len(payload["nodes"]["Concept"]) == 1
     assert "_kb_migrations" not in payload["nodes"]
+
+
+def test_graph_batch_execution(kb_dir: Path) -> None:
+    batch = [
+        {
+            "op": "node",
+            "label": "Document",
+            "props": {"id": "raw-0001", "name": "doc1", "origin": "raw", "sources": ["raw-0001"]},
+        },
+        {
+            "op": "node",
+            "label": "Concept",
+            "props": {"id": "c10", "name": "concept10", "origin": "raw", "sources": ["raw-0001"]},
+        },
+        {
+            "op": "edge",
+            "rel": "MENTIONS",
+            "from": "Document:raw-0001",
+            "to": "Concept:c10",
+            "props": {"origin": "raw", "sources": ["raw-0001"]},
+        },
+        {
+            "op": "claim",
+            "id": "cl-batch-1",
+            "subject": "Concept:c10",
+            "predicate": "is_valid",
+            "object_literal": "true",
+            "props": {"origin": "raw", "sources": ["raw-0001"]},
+        },
+    ]
+    batch_file = kb_dir / "batch.json"
+    batch_file.write_text(json.dumps(batch), encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        ["graph", "batch", "--file", str(batch_file), "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["nodes_upserted"] == 2
+    assert summary["edges_upserted"] == 1
+    assert summary["claims_upserted"] == 1
+    assert summary["total_operations"] == 4
+
+    # Verify state in DB
+    query_res = runner.invoke(
+        app,
+        ["graph", "query", "MATCH (c:Concept {id: 'c10'}) RETURN c.name AS name", "--kb", str(kb_dir), "--json"],
+    )
+    assert json.loads(query_res.output)["rows"] == [{"name": "concept10"}]

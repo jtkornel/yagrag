@@ -24,14 +24,15 @@ Trigger this skill when:
     *   **Crucial**: Every node MUST include `origin: "raw"` and `sources: ["<doc_id>"]`.
     *   **Code Representation**: For nodes supporting it (e.g., `Equation`, `Algorithm`), write the checkable snippet to the `code/` directory (using document/source namespacing for paper-specific snippets, e.g., `code/equations/<doc_id>/<slug>.sympy` and `code/algorithms/<doc_id>/<slug>.py`) and run `kb code check` after upserting. Refer to the `code-representation` skill for the formal specification. Do NOT include paper equation numbers in snippet comments; store paper equation references in the node's `summary` or properties.
     *   Use the `summary` field to capture a brief definition of the entity as used in the document.
+    *   **Fast Batch Operations**: For extracting multiple entities, edges, and claims, write a JSON array payload and run `kb graph batch <file.json>` (or pipe via stdin `cat payload.json | kb graph batch -`). Python scripts can also import directly `from kb import execute_batch, open_graph, upsert_node, upsert_edge, upsert_claim`.
 4.  **Extract Claims**: Identify specific assertions with a truth value or quantitative result (e.g., "Method X achieves 2.1% drift").
-    *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'`.
+    *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'` (or include `"op": "claim"` in `kb graph batch`).
     *   Use `--object-literal` for quantitative results or `--object Label:id` for relationships between entities.
 5.  **Establish Relations**: Link the `Document` node to its contents:
     *   `DEFINES`: For new concepts or models introduced by the document.
     *   `MENTIONS`: For existing concepts or related work cited.
     *   `SUPPORTS`: To link the `Document` to the `Claim` nodes it asserts.
-    *   Use `kb graph upsert-edge`.
+    *   Use `kb graph upsert-edge` (or `"op": "edge"` in `kb graph batch`).
 6.  **Cross-Link Domain**: Connect domain entities directly (e.g., `FactorGraph` --`HAS_VARIABLE`--> `Variable`). This builds the "physics" of the graph.
 
 ## Rules

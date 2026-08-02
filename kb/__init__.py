@@ -5,4 +5,29 @@ It is intentionally LLM-free; all reasoning lives in the agent layer
 (`.agents/skills/`) which invokes this CLI.
 """
 
+from .config import KBConfig
+from .graph import (
+    GraphDB,
+    GraphWriteError,
+    KuzuNotInstalled,
+    ProvenanceError,
+    execute_batch,
+    open_graph,
+    upsert_claim,
+    upsert_edge,
+    upsert_node,
+)
+
 __version__ = "0.1.0"
+__all__ = [
+    "KBConfig",
+    "GraphDB",
+    "GraphWriteError",
+    "KuzuNotInstalled",
+    "ProvenanceError",
+    "execute_batch",
+    "open_graph",
+    "upsert_claim",
+    "upsert_edge",
+    "upsert_node",
+]

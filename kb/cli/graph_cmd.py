@@ -19,6 +19,7 @@ from ..graph.connection import GraphDB, KuzuNotInstalled
 from ..graph.upsert import (
     GraphWriteError,
     ProvenanceError,
+    execute_batch,
     upsert_claim,
     upsert_edge,
     upsert_node,
@@ -246,3 +247,55 @@ def cmd_export(
         g.close()
     payload = {"nodes": nodes, "relationships": rels}
     typer.echo(_json.dumps(payload, indent=2))
+
+
+@graph_app.command("batch")
+def cmd_batch(
+    batch_file: Optional[Path] = typer.Option(  # noqa: UP007
+        None,
+        "--file",
+        "-f",
+        help="JSON file containing array of graph operations (omit or use '-' for stdin).",
+    ),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Execute a batch of graph operations (nodes, edges, claims) from JSON."""
+    import sys
+
+    raw_json: str
+    if batch_file is None or str(batch_file) == "-":
+        raw_json = sys.stdin.read()
+    else:
+        if not batch_file.is_file():
+            _fail(f"batch file not found: {batch_file}", json_output)
+            return
+        raw_json = batch_file.read_text(encoding="utf-8")
+
+    try:
+        data = _json.loads(raw_json)
+    except _json.JSONDecodeError as exc:
+        _fail(f"batch JSON decode error: {exc}", json_output)
+        return
+
+    if not isinstance(data, list):
+        _fail("batch input must be a JSON array of operation objects", json_output)
+        return
+
+    g = _open_db(kb, json_output)
+    try:
+        result = execute_batch(g, data)
+    except (ProvenanceError, GraphWriteError) as exc:
+        _fail(str(exc), json_output)
+        return
+    finally:
+        g.close()
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+    else:
+        _console.print(
+            f"[green]batch complete:[/green] {result['nodes_upserted']} nodes, "
+            f"{result['edges_upserted']} edges, {result['claims_upserted']} claims "
+            f"upserted ({result['total_operations']} total operations)"
+        )
