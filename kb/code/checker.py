@@ -448,22 +448,42 @@ def _run_ruff(path: Path) -> tuple[list[str], bool]:
     return findings, True
 
 
-_EQUATION_COMMENT_RE = re.compile(
-    r"#.*?\b(?:eq|equation)\.?\s*\(?\d+[a-z]?\)?", re.IGNORECASE
+_DOC_REF_RE = re.compile(
+    r"\b(?:eq|equation|table|tbl|fig|figure|sec|section)s?\b\.?\s*\(?\b(?:[0-9]+[a-z]?|[IVXLCDM]+)\b\)?",
+    re.IGNORECASE,
 )
 
 
-def _check_comment_equation_refs(source: str) -> list[str]:
-    """Warn if snippet comments contain paper-specific equation references."""
+def _check_comment_doc_refs(source: str, language: str = LANGUAGE_PYTHON) -> list[str]:
+    """Warn if snippet comments or docstrings contain paper-specific references."""
     for line in source.splitlines():
         if "#" in line:
             comment_part = line[line.find("#") :]
-            if _EQUATION_COMMENT_RE.search(comment_part):
+            match = _DOC_REF_RE.search(comment_part)
+            if match:
                 return [
-                    "snippet comment contains paper-specific equation reference; "
-                    "paper equation numbers belong on the Equation graph node property/summary, "
-                    "not in code snippet comments"
+                    f"snippet comment contains paper-specific reference ('{match.group(0)}'); "
+                    "paper equation/table/figure references belong on graph node property/summary, "
+                    "not in code snippet comments or docstrings"
                 ]
+    if language == LANGUAGE_PYTHON:
+        try:
+            tree = ast.parse(source)
+            for node in ast.walk(tree):
+                if isinstance(
+                    node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                ):
+                    doc = ast.get_docstring(node)
+                    if doc:
+                        match = _DOC_REF_RE.search(doc)
+                        if match:
+                            return [
+                                f"snippet docstring contains paper-specific reference ('{match.group(0)}'); "
+                                "paper equation/table/figure references belong on graph node property/summary, "
+                                "not in code snippet comments or docstrings"
+                            ]
+        except SyntaxError:
+            pass
     return []
 
 
@@ -531,7 +551,7 @@ def check_node(
     language = _language_for(node, path)
 
     if language in (LANGUAGE_PYTHON, LANGUAGE_SYMPY):
-        warnings.extend(_check_comment_equation_refs(source))
+        warnings.extend(_check_comment_doc_refs(source, language))
 
     if language == LANGUAGE_PYTHON:
         checkers.append("ast")

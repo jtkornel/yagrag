@@ -241,7 +241,9 @@ def test_unknown_sympy_symbol_is_a_warning_not_a_failure(kb_root: Path) -> None:
     assert any("mystery_term" in w for w in entry["warnings"])
 
 
-def test_equation_number_in_comments_issues_warning(kb_root: Path) -> None:
+def test_paper_references_in_comments_or_docstrings_issue_warning(
+    kb_root: Path,
+) -> None:
     _seed_symbols(kb_root)
     rel = _write_code(
         kb_root,
@@ -254,9 +256,25 @@ def test_equation_number_in_comments_issues_warning(kb_root: Path) -> None:
         _prov({"id": "paper-ref-eq", "code_language": "sympy", "code_path": rel}),
     )
 
-    entry = _by_ref(_check(kb_root))["Equation:paper-ref-eq"]
-    assert entry["status"] == STATUS_OK
-    assert any("paper-specific equation reference" in w for w in entry["warnings"])
+    rel_py = _write_code(
+        kb_root,
+        "algorithms/table_ref.py",
+        'def classify():\n    """Based on Table 4 in paper."""\n    return 1\n',
+    )
+    _upsert(
+        kb_root,
+        "Algorithm",
+        _prov({"id": "paper-ref-alg", "code_language": "python", "code_path": rel_py}),
+    )
+
+    res = _by_ref(_check(kb_root))
+    entry_eq = res["Equation:paper-ref-eq"]
+    assert entry_eq["status"] == STATUS_OK
+    assert any("paper-specific reference" in w for w in entry_eq["warnings"])
+
+    entry_alg = res["Algorithm:paper-ref-alg"]
+    assert entry_alg["status"] == STATUS_OK
+    assert any("paper-specific reference" in w for w in entry_alg["warnings"])
 
 
 def test_malformed_sympy_expression_is_failed(kb_root: Path) -> None:
