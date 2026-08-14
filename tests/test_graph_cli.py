@@ -348,3 +348,59 @@ def test_graph_lint_command(kb_dir: Path) -> None:
     assert payload["ok"] is True  # warning severity
     assert payload["issue_count"] == 1
     assert payload["issues"][0]["category"] == "floating_node"
+
+
+def test_graph_dedupe_command_dry_run_and_apply(kb_dir: Path) -> None:
+    # 1. Upsert document
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Document", "--props",
+         json.dumps({"id": "doc1", "name": "Paper 1", "origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+
+    # 2. Upsert two duplicate Tool nodes
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Concept", "--props",
+         json.dumps({"id": "tool_gtsam", "name": "GTSAM Factor Graph Library", "origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+    runner.invoke(
+        app,
+        ["graph", "upsert-edge", "MENTIONS", "--from", "Document:doc1", "--to", "Concept:tool_gtsam",
+         "--props", json.dumps({"origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Concept", "--props",
+         json.dumps({"id": "gtsam_lib", "name": "GTSAM factor graph library", "origin": "raw", "sources": ["doc2"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+
+    # 3. Test dry-run dedupe
+    res_dry = runner.invoke(app, ["graph", "dedupe", "--label", "Concept", "--kb", str(kb_dir), "--json"])
+    assert res_dry.exit_code == 0, res_dry.output
+    dry_data = json.loads(res_dry.output)
+    assert dry_data["applied"] is False
+    assert dry_data["merged_count"] == 1
+    assert dry_data["merges"][0]["canonical_id"] == "tool_gtsam"
+    assert dry_data["merges"][0]["merged_id"] == "gtsam_lib"
+
+    # 4. Test apply dedupe
+    res_apply = runner.invoke(app, ["graph", "dedupe", "--label", "Concept", "--apply", "--kb", str(kb_dir), "--json"])
+    assert res_apply.exit_code == 0, res_apply.output
+    apply_data = json.loads(res_apply.output)
+    assert apply_data["applied"] is True
+
+    # 5. Verify in graph
+    res_q = runner.invoke(
+        app,
+        ["graph", "query", "MATCH (c:Concept) RETURN c.id AS id, c.sources AS sources", "--kb", str(kb_dir), "--json"],
+    )
+    rows = json.loads(res_q.output)["rows"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == "tool_gtsam"
+    assert set(rows[0]["sources"]) == {"doc1", "doc2"}

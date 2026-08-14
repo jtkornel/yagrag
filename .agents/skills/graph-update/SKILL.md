@@ -24,12 +24,11 @@ Trigger this skill when:
     *   Ensure each claim has its own `origin`, `sources`, and `confidence` properties.
     *   This preserves the history of the disagreement in the field.
 4.  **Update Edges**: Use `kb graph upsert-edge`. If an edge between two nodes already exists, updating it with a new source ID reinforces the relationship and increases overall graph confidence.
-5.  **Merge Duplicates**: If you find two nodes that represent the exact same thing but have different IDs (e.g., `algo_ekf` and `ekf_slam_method`):
+5.  **Merge Duplicates**: Use `kb graph dedupe` for automated multi-entity cluster merging, or manually:
     *   Identify the most descriptive ID as the primary.
     *   Update all edges pointing to/from the duplicate to point to the primary.
-    *   Once all edges are moved, the duplicate is safely isolated (mark it as such in its summary).
-
-6.  **Run Quality Lint**: Always run `kb graph lint` after graph updates to ensure no floating nodes, malformed symbols, or Claim schema violations were introduced.
+    *   Once all edges are moved, the duplicate can be deleted or safely isolated.
+6.  **Run Quality Lint & Maintenance**: Run `kb graph lint` and `kb doc clean` (or trigger `knowledge-base-maintenance`) after graph updates to ensure no floating nodes, duplicate stubs, or Claim schema violations were introduced.
 
 ## Rules
 

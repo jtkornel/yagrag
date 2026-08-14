@@ -115,6 +115,7 @@ per-tool configuration. If your agent only scans its own directory, symlink or c
 | `document-synthesis` | Create new summary or overview documents based on existing knowledge in the graph. |
 | `question-answering` | Answer user questions using evidence strictly retrieved from the knowledge base. |
 | `code-representation` | Write and check statically checkable code for equations, algorithms, and models. |
+| `knowledge-base-maintenance` | Audit, clean, and maintain knowledge base quality across documents, citations, domain entities, and symbols. |
 
 ### The layered schema philosophy
 
@@ -281,7 +282,7 @@ Supported migration operations:
 | `kb init` | `<path>` (and `--name`, `--json`) |
 | `kb schema` | `show`, `validate`, `apply`, `migrate`, `status` |
 | `kb doc` | `add`, `list`, `show`, `text`, `remove`, `cite`, `stubs`, `match-stubs`, `reconcile-stub`, `clean` |
-| `kb graph` | `upsert-node`, `upsert-edge`, `upsert-claim`, `query`, `export`, `batch`, `lint` |
+| `kb graph` | `upsert-node`, `upsert-edge`, `upsert-claim`, `query`, `export`, `batch`, `lint`, `dedupe` |
 | `kb index` | `build` |
 | `kb search` | (hybrid retrieval + context bundle) |
 | `kb code` | `list`, `show`, `check` |
