@@ -25,7 +25,7 @@ Trigger this skill when:
     *   Removes navigation bars, footers, ads, cookie banners, and sidebars.
     *   Includes the original URL at the top for easy reference.
 3.  **Prepare for Ingest**: Save the cleaned content to a file with a `.md` extension.
-4.  **Ingest**: Use `kb doc add <file> --kind raw --notes "Source URL: <url>"` to add the document.
+4.  **Ingest**: Extract the full, human-readable document/article title and use `kb doc add <file> --kind raw --title "<Full Title>" --url "<url>"` to add the document.
 5.  **Graph Update**: When creating the corresponding `Document` node, ensure the `url` property is populated with the original source URL.
 
 ## Rules

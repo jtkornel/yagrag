@@ -21,7 +21,7 @@ Trigger this skill when:
     *   Use tables for quantitative comparisons (e.g., comparing drift across `Method` nodes).
     *   Include citations (e.g., `[raw-0001]`) for every factual assertion.
     *   Include a "References" section at the bottom listing the source document IDs.
-3.  **Add to Store**: Save the text to a temporary file and run `kb doc add <file> --kind synthesized`. 
+3.  **Add to Store**: Save the text to a temporary file and run `kb doc add <file> --kind synthesized --title "<Descriptive Title>"`. 
     *   **Crucial**: Repeat the `--source <id>` flag for every raw document that contributed to the synthesis.
 4.  **Capture ID**: Save the new document ID returned by the CLI (e.g., `synth-0001`).
 5.  **Create Graph Node**: Every synthesized document needs a `Document` node in the graph. Run `kb graph upsert-node Document --props '...'`. 

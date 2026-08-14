@@ -15,8 +15,9 @@ Trigger this skill when:
 ## Steps
 
 1.  **Check Format**: Ensure the file is a `.pdf`, `.txt`, or `.md`. These are the only natively supported formats. If it is HTML, redirect to `save-html-as-digestible`.
-2.  **Add Document**: Run `kb doc add <file> --kind raw` with optional flags:
-    *   `--title T`: A human-readable title.
+2.  **Extract/Determine Title**: BEFORE running `kb doc add`, inspect the file content, header, or source metadata to extract the full, human-readable document or paper title. Do NOT rely on the filename stem alone, as source files frequently have uninformative, obscure, or hash-like names (e.g., `1-s2.0-S0921889025000156-main.pdf`, `s41598-025-96066-8.pdf`, `2505.00200v2.pdf`).
+3.  **Add Document**: Run `kb doc add <file> --kind raw --title "<Full Human-Readable Title>"` with flags:
+    *   `--title T`: **Mandatory for research papers and documents with non-descriptive filenames.** Full, human-readable title.
     *   `--tag T`: Useful keywords for grouping (repeatable).
     *   `--notes N`: Any specific context about the acquisition of the document.
     *   `--url U`: Source URL if downloaded from the web.
@@ -27,7 +28,9 @@ Trigger this skill when:
 
 ## Rules
 
-*   **Immutable Raw Data**: Raw documents are immutable once ingested. Do not attempt to modify their text or metadata after the initial `kb doc add`.
+*   **Mandatory Human-Readable Title**: Never omit `--title` when ingesting documents unless the input filename is already verified to be a clean, human-readable title. Do not allow default fallback to uninformative filename stems (such as publisher PII codes, DOIs, arXiv numbers, or hashes). Both `manifest.json` and the `Document` graph node `name` property must hold the full paper title.
+*   **Title Synchronization**: If an ingestion previously occurred with an uninformative or placeholder title, update the `manifest.json` record and the `Document` graph node `name` property, then rebuild search indexes using `kb index build`.
+*   **Immutable Raw Data**: Raw document source files are immutable once ingested. Do not attempt to modify their extracted text after the initial `kb doc add`.
 *   **Mandatory ID**: Never proceed to extraction without capturing the document ID returned by `kb doc add`.
 *   **Supported Formats Only**: The CLI only supports PDF, TXT, and Markdown. Do not try to ingest other binary formats like `.docx` or `.xlsx` without conversion.
 *   **Provenance**: The `sources` list for the `Document` node must contain its own ID. This is the root of the provenance chain.
