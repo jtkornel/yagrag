@@ -130,7 +130,10 @@ domain-specific and meant to be replaced when you model a different domain.
   - Relation types: `CITES`, `AUTHORED_BY`, `PUBLISHED_IN`, `DERIVED_FROM`, `MENTIONS`, `DEFINES`, `SUPPORTS`, `CONTRADICTS`
 
 - **Layer 2: reified claim layer** (general, reusable across research fields)
-  - Node types: `Claim` — a claim is its own node, carrying subject–predicate–object, qualifiers, confidence and sources as properties.
+  - Node types: `Claim` — a claim is its own node, carrying subject–predicate–object semantic triples, qualifiers, confidence and sources as properties.
+  - Property discipline:
+    - `name`: Short label or title (max 5–10 words, e.g. `"Slip-track EKF drift bound"`).
+    - `summary`: Full, self-contained natural language assertion sentence capturing context, conditions, and quantitative findings.
   - Relation types: `ABOUT`/`HAS_OBJECT` link a claim to its subject and object, which may be a node from any layer; documents attach via `SUPPORTS`/`CONTRADICTS`.
   - It sits *above* the entity layers: it says who asserts what about the entities they contain, rather than
     adding domain entities of its own, so swapping the domain layer leaves it unchanged.

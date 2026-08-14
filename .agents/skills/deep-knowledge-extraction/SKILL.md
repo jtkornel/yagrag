@@ -26,7 +26,10 @@ Trigger this skill when:
     *   Use the `summary` field to capture a brief definition of the entity as used in the document.
     *   **Fast Batch Operations**: For extracting multiple entities, edges, and claims, write a JSON array payload and run `kb graph batch <file.json>` (or pipe via stdin `cat payload.json | kb graph batch -`). Python scripts can also import directly `from kb import execute_batch, open_graph, upsert_node, upsert_edge, upsert_claim`.
 4.  **Extract Claims**: Identify specific assertions with a truth value or quantitative result (e.g., "Method X achieves 2.1% drift").
-    *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'` (or include `"op": "claim"` in `kb graph batch`).
+    *   **Strict Property Split**:
+        *   `name`: Concise, short title or label for the claim (max 5–10 words, e.g. `"Slip-track EKF drift bound"`). Do NOT place full sentences in `name`.
+        *   `summary`: Complete, natural language assertion statement explaining the context, conditions, and quantitative finding.
+    *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"name": "<Short Label>", "summary": "<Full Assertion Sentence>", "origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'` (or include `"op": "claim"` in `kb graph batch`).
     *   Use `--object-literal` for quantitative results or `--object Label:id` for relationships between entities.
 5.  **Establish Relations**: Link the `Document` node to its contents and other documents:
     *   `DEFINES`: For new concepts or models introduced by the document.
