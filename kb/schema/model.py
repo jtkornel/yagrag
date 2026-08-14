@@ -236,6 +236,15 @@ class CreateRelOp(BaseModel):
     table: RelationType
 
 
+class AddRelPairOp(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    op: Literal["add_rel_pair"]
+    table: str
+    from_: str = Field(alias="from")
+    to: str
+
+
 class CypherOp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -244,7 +253,7 @@ class CypherOp(BaseModel):
 
 
 MigrationOp = Annotated[
-    Union[CreateNodeOp, CreateRelOp, CypherOp],
+    Union[CreateNodeOp, CreateRelOp, AddRelPairOp, CypherOp],
     Field(discriminator="op"),
 ]
 
@@ -272,5 +281,11 @@ class Migration(BaseModel):
                 if raw.table.name in schema.relation_type_names():
                     raise ValueError(f"duplicate relation type: {raw.table.name}")
                 schema.relation_types.append(raw.table)
+            elif isinstance(raw, AddRelPairOp):
+                rt = next((r for r in schema.relation_types if r.name == raw.table), None)
+                if rt is None:
+                    raise ValueError(f"unknown relation type for add_rel_pair: {raw.table}")
+                if not any(p.from_ == raw.from_ and p.to == raw.to for p in rt.pairs):
+                    rt.pairs.append(RelPair(from_=raw.from_, to=raw.to))
             elif isinstance(raw, CypherOp):
                 pass  # opaque

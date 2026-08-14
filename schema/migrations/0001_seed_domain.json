@@ -309,6 +309,24 @@
       { "from": "SensorModel", "to": "NoiseModel" },
       { "from": "MotionModel", "to": "NoiseModel" },
       { "from": "Factor", "to": "NoiseModel" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "USES_SYMBOL", "pairs": [
+      { "from": "Equation", "to": "Quantity" },
+      { "from": "Equation", "to": "Variable" },
+      { "from": "MotionModel", "to": "Quantity" },
+      { "from": "SensorModel", "to": "Quantity" },
+      { "from": "NoiseModel", "to": "Quantity" },
+      { "from": "Factor", "to": "Quantity" }
+    ] } },
+    { "op": "create_rel_table", "table": { "name": "EXPRESSED_BY", "pairs": [
+      { "from": "Quantity", "to": "Equation" },
+      { "from": "Quantity", "to": "MotionModel" },
+      { "from": "MotionModel", "to": "Equation" },
+      { "from": "SensorModel", "to": "Equation" },
+      { "from": "NoiseModel", "to": "Equation" },
+      { "from": "Factor", "to": "Equation" },
+      { "from": "Algorithm", "to": "Equation" },
+      { "from": "Method", "to": "Equation" }
     ] } }
   ]
 }

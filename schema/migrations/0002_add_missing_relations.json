@@ -1,0 +1,17 @@
+{
+  "id": "0002_add_missing_relations",
+  "description": "Add missing domain relationship pairs between StateEstimator, Algorithm, Method, Equation, FactorGraph, Solver, MotionModel, SensorModel, Quantity, and Variable.",
+  "operations": [
+    { "op": "add_rel_pair", "table": "USES", "from": "StateEstimator", "to": "Algorithm" },
+    { "op": "add_rel_pair", "table": "USES", "from": "StateEstimator", "to": "Method" },
+    { "op": "add_rel_pair", "table": "USES", "from": "StateEstimator", "to": "FactorGraph" },
+    { "op": "add_rel_pair", "table": "USES", "from": "StateEstimator", "to": "Solver" },
+    { "op": "add_rel_pair", "table": "USES", "from": "Algorithm", "to": "MotionModel" },
+    { "op": "add_rel_pair", "table": "USES", "from": "Algorithm", "to": "SensorModel" },
+    { "op": "add_rel_pair", "table": "DEFINED_BY", "from": "Algorithm", "to": "Equation" },
+    { "op": "add_rel_pair", "table": "DEFINED_BY", "from": "Method", "to": "Equation" },
+    { "op": "add_rel_pair", "table": "DEFINED_BY", "from": "Variable", "to": "Equation" },
+    { "op": "add_rel_pair", "table": "DEFINED_BY", "from": "Quantity", "to": "MotionModel" },
+    { "op": "add_rel_pair", "table": "DEFINED_BY", "from": "Variable", "to": "MotionModel" }
+  ]
+}

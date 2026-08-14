@@ -22,6 +22,7 @@ from typing import Any
 
 from ..graph.connection import GraphDB
 from .model import (
+    AddRelPairOp,
     CreateNodeOp,
     CreateRelOp,
     CypherOp,
@@ -134,6 +135,8 @@ def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
                 g.execute(render_create_node_table(op.table))
             elif isinstance(op, CreateRelOp):
                 g.execute(render_create_rel_table(op.table))
+            elif isinstance(op, AddRelPairOp):
+                g.execute(f"ALTER TABLE {op.table} ADD FROM {op.from_} TO {op.to}")
             elif isinstance(op, CypherOp):
                 g.execute(op.sql)
     else:
