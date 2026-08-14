@@ -16,7 +16,7 @@ Trigger this skill when:
 
 1.  **Read Text**: Run `kb doc text <id>` to retrieve the full content of the document.
 2.  **Identify Entities**: Scan the text for nodes matching the seed schema. Look for:
-    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, and variables like $v_x$, $\omega_z$, $f_r$, $B_s$), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
+    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
     *   **Models**: `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
     *   **Architecture**: `StateEstimator` (e.g., EKF, iSAM2), `Solver` (e.g., Levenberg-Marquardt), `Robot`, `Sensor`.
     *   **Academic**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`.
@@ -39,7 +39,7 @@ Trigger this skill when:
 6.  **Cross-Link Domain (Zero Floating Nodes)**: Connect domain entities directly:
     *   `StateEstimator` --`USES`--> `Algorithm` / `Method` / `MotionModel` / `SensorModel` / `FactorGraph` / `Solver`.
     *   `Quantity` --`DEFINED_BY`--> `Equation`: Use `DEFINED_BY` strictly when the `Equation` computes or defines this target output quantity (left-hand side / LHS).
-    *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms/quantities appearing inside its expression.
+    *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms, intermediate symbols, normalization constants, and sub-expression parameters appearing inside its expression.
     *   `FactorGraph` --`HAS_VARIABLE`--> `Variable`, `FactorGraph` --`HAS_FACTOR`--> `Factor`.
     *   `Algorithm` / `Method` / `System` --`EVALUATED_ON`--> `Dataset` / `Metric`.
     *   Every extracted node MUST be connected via at least one relationship edge. Floating nodes with 0 edges are prohibited.
@@ -58,6 +58,7 @@ Trigger this skill when:
 *   **Mandatory Provenance**: Every `upsert-node`, `upsert-edge`, and `upsert-claim` MUST include `origin` and `sources` in its properties.
 *   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
 *   **Symbol Sanitization**: For `Variable` and `Quantity` nodes, `symbol` must contain ONLY the clean LaTeX symbol string for that specific entity (e.g. `"B_s"`, `"f_r"`), never concatenated or combined multi-variable text.
+*   **Intermediate Symbol Extraction / Symbol Interconnectivity**: Extract not only primary physical variables and measurements, but also intermediate equation parameters, normalization factors, constants, and sub-expression symbols (e.g. $C$, $N$, $\theta_k$) as explicit `Quantity` nodes. Wire each parameter to its parent `Equation` via `USES_SYMBOL` edges. This maximizes graph interconnectivity, prevents unlinked mathematical terms, and ensures SymPy static checks (`kb code check`) verify all free symbols without unknown symbol warnings.
 *   **Zero Floating Nodes**: Every extracted `Equation`, `Algorithm`, `Variable`, `Quantity`, or `Dataset` must be linked to its parent model, estimator, or paper via domain relationships.
 *   **LaTeX for Equations**: Always capture equations in their raw LaTeX format to allow for future mathematical reasoning.
 *   **Machine-Checkable Code**: Whenever you can, provide a SymPy form for equations or a Python 3.11 implementation for algorithms. However, missing or uncheckable code NEVER blocks ingestion; an `Equation` with only `latex` is still a valid and useful node. Refer to `code-representation` for how to store and check these snippets.
@@ -81,8 +82,53 @@ kb graph upsert-node Equation --props '{
   "sources": ["raw-0001"]
 }'
 
+# Upsert Quantities (LHS output, intermediate variables, and parameters)
+kb graph upsert-node Quantity --props '{
+  "id": "qty_delta_R_ij",
+  "name": "Preintegrated relative rotation",
+  "symbol": "\\Delta R_{ij}",
+  "unit": "-",
+  "origin": "raw",
+  "sources": ["raw-0001"]
+}'
+
+kb graph upsert-node Quantity --props '{
+  "id": "qty_omega_k",
+  "name": "Angular velocity measurement at step k",
+  "symbol": "\\omega_k",
+  "unit": "rad/s",
+  "origin": "raw",
+  "sources": ["raw-0001"]
+}'
+
+kb graph upsert-node Quantity --props '{
+  "id": "qty_b_g",
+  "name": "Gyroscope bias",
+  "symbol": "b_g",
+  "unit": "rad/s",
+  "origin": "raw",
+  "sources": ["raw-0001"]
+}'
+
+kb graph upsert-node Quantity --props '{
+  "id": "qty_delta_t",
+  "name": "IMU sampling interval",
+  "symbol": "\\Delta t",
+  "unit": "s",
+  "origin": "raw",
+  "sources": ["raw-0001"]
+}'
+
 # Link document to the equation
 kb graph upsert-edge DEFINES --from Document:raw-0001 --to Equation:eq_imu_preint --props '{"origin": "raw", "sources": ["raw-0001"]}'
+
+# Link LHS defined quantity: (Quantity)-[:DEFINED_BY]->(Equation)
+kb graph upsert-edge DEFINED_BY --from Quantity:qty_delta_R_ij --to Equation:eq_imu_preint --props '{"origin": "raw", "sources": ["raw-0001"]}'
+
+# Link input terms and intermediate parameters: (Equation)-[:USES_SYMBOL]->(Quantity)
+kb graph upsert-edge USES_SYMBOL --from Equation:eq_imu_preint --to Quantity:qty_omega_k --props '{"origin": "raw", "sources": ["raw-0001"]}'
+kb graph upsert-edge USES_SYMBOL --from Equation:eq_imu_preint --to Quantity:qty_b_g --props '{"origin": "raw", "sources": ["raw-0001"]}'
+kb graph upsert-edge USES_SYMBOL --from Equation:eq_imu_preint --to Quantity:qty_delta_t --props '{"origin": "raw", "sources": ["raw-0001"]}'
 
 # Upsert a claim about performance
 kb graph upsert-claim claim_drift_01 --subject Method:preint_v2 --predicate "achieves_drift" --object-literal "0.5% per km" --props '{

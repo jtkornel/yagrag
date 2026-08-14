@@ -224,8 +224,10 @@ properties simply stay null.
 Optionally, a node type may declare a **`symbol`** `STRING` property. Every type that does becomes a source of
 known symbols for SymPy symbol-consistency checking (its `symbol`, `id` and `name` values all count). In the
 seed schema those are `Quantity` and `Variable`; in another domain they might be `PhysicalConstant` or
-`FieldComponent`. Without any symbol-bearing type, expressions still parse — the symbol cross-check is simply
-reported as skipped.
+`FieldComponent`. Extracting intermediate parameters, normalization factors, constants, and sub-expression
+symbols (e.g., $C$, $N$, $\theta_k$) as explicit `Quantity` nodes connected via `USES_SYMBOL` maximizes
+symbol-graph interconnectivity and allows `kb code check` to verify all free symbols without warnings.
+Without any symbol-bearing type, expressions still parse — the symbol cross-check is simply reported as skipped.
 
 **What you get in return**, for free, on every statically checkable type:
 
