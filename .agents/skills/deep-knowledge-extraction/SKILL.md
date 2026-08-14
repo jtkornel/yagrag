@@ -28,12 +28,26 @@ Trigger this skill when:
 4.  **Extract Claims**: Identify specific assertions with a truth value or quantitative result (e.g., "Method X achieves 2.1% drift").
     *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'` (or include `"op": "claim"` in `kb graph batch`).
     *   Use `--object-literal` for quantitative results or `--object Label:id` for relationships between entities.
-5.  **Establish Relations**: Link the `Document` node to its contents:
+5.  **Establish Relations**: Link the `Document` node to its contents and other documents:
     *   `DEFINES`: For new concepts or models introduced by the document.
     *   `MENTIONS`: For existing concepts or related work cited.
     *   `SUPPORTS`: To link the `Document` to the `Claim` nodes it asserts.
-    *   Use `kb graph upsert-edge` (or `"op": "edge"` in `kb graph batch`).
-6.  **Cross-Link Domain**: Connect domain entities directly (e.g., `FactorGraph` --`HAS_VARIABLE`--> `Variable`). This builds the "physics" of the graph.
+    *   `CITES`: To link the `Document` node to other `Document` nodes when the paper directly references another document present in the knowledge base (e.g., `(citing_doc)-[:CITES]->(cited_doc)`).
+6.  **Cross-Link Domain (Zero Floating Nodes)**: Connect domain entities directly:
+    *   `StateEstimator` --`USES`--> `Algorithm` / `Method` / `MotionModel` / `SensorModel` / `FactorGraph` / `Solver`.
+    *   `Quantity` --`DEFINED_BY`--> `Equation`: Use `DEFINED_BY` strictly when the `Equation` computes or defines this target output quantity (left-hand side / LHS).
+    *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms/quantities appearing inside its expression.
+    *   `FactorGraph` --`HAS_VARIABLE`--> `Variable`, `FactorGraph` --`HAS_FACTOR`--> `Factor`.
+    *   `Algorithm` / `Method` / `System` --`EVALUATED_ON`--> `Dataset` / `Metric`.
+    *   Every extracted node MUST be connected via at least one relationship edge. Floating nodes with 0 edges are prohibited.
+7.  **Record Citations via `kb doc cite`**: Scan the document's reference section / bibliography for all cited papers and record them using the single mechanical command `kb doc cite`:
+    ```bash
+    kb doc cite <citing_doc_id> --title "<Full Cited Paper Title>" --year <Year> --url "<DOI or URL>" --ref "<Full Reference String from Bibliography>"
+    ```
+    *   **Automated Matching & Stub Handling**: The CLI mechanically checks if the cited paper already exists in the graph (as an ingested raw document or existing stub).
+        *   If it already exists: the CLI automatically links the `CITES` edge and accumulates provenance without creating duplicates.
+        *   If it is a new external paper: the CLI automatically creates a placeholder `Document` stub (`kind: "stub"`) and the `CITES` edge atomically.
+8.  **Run Graph Quality Linting**: After completing extraction, execute `kb graph lint` to verify that 0 floating nodes, missing provenance, or claim formatting errors were introduced.
 
 ## Rules
 
@@ -76,4 +90,7 @@ kb graph upsert-claim claim_drift_01 --subject Method:preint_v2 --predicate "ach
 
 # Support the claim
 kb graph upsert-edge SUPPORTS --from Document:raw-0001 --to Claim:claim_drift_01 --props '{"origin": "raw", "sources": ["raw-0001"]}'
+
+# Link document to another document it cites
+kb graph upsert-edge CITES --from Document:raw-0001 --to Document:raw-0004 --props '{"origin": "raw", "sources": ["raw-0001"], "confidence": 1.0}'
 ```

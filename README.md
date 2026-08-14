@@ -280,8 +280,8 @@ survive a schema change.
 |---|---|
 | `kb init` | `<path>` (and `--name`, `--json`) |
 | `kb schema` | `show`, `validate`, `apply`, `migrate`, `status` |
-| `kb doc` | `add`, `list`, `show`, `text`, `remove` |
-| `kb graph` | `upsert-node`, `upsert-edge`, `upsert-claim`, `query`, `export` |
+| `kb doc` | `add`, `list`, `show`, `text`, `remove`, `cite`, `stubs`, `match-stubs`, `reconcile-stub`, `clean` |
+| `kb graph` | `upsert-node`, `upsert-edge`, `upsert-claim`, `query`, `export`, `batch`, `lint` |
 | `kb index` | `build` |
 | `kb search` | (hybrid retrieval + context bundle) |
 | `kb code` | `list`, `show`, `check` |
