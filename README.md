@@ -268,14 +268,11 @@ Schema evolves via versioned, numbered migrations:
 
 Migrations are append-only and never edited once applied.
 
-**Deliberate limitation — no `ALTER TABLE` yet.** The migration model supports
-`create_node_table`, `create_rel_table` and raw `cypher` only; there is no
-`add_node_property` operation. While no long-lived knowledge base exists (every
-KB in this repo — tests and `examples/factor-graph-slam/` — is rebuilt from
-scratch by a script), adding a property to an existing type means **editing the
-seed migration `schema/migrations/0001_seed_domain.json` and rebuilding**. An
-`add_node_property` / `ALTER TABLE` operation will be added once a KB has to
-survive a schema change.
+Supported migration operations:
+- `create_node_table`: Declare a new node table and properties.
+- `create_rel_table`: Declare a new relation table and allowed pairs.
+- `add_rel_pair`: Extend an existing relation table with new allowed `(from, to)` pairs via Kùzu `ALTER TABLE`.
+- `cypher`: Execute raw DDL/DML Cypher statements verbatim.
 
 ### CLI reference
 
