@@ -237,6 +237,12 @@ def cmd_check(
         "--id",
         help="Filter by node id.",
     ),  # noqa: UP007
+    all: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Check all statically checkable nodes (default behavior).",
+    ),
     lint: bool = typer.Option(False, "--lint", help="Run optional lint checks."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,

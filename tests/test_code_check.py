@@ -291,6 +291,22 @@ def test_malformed_sympy_expression_is_failed(kb_root: Path) -> None:
     assert any("sympy parse error" in e for e in entry["errors"])
 
 
+def test_code_check_with_all_flag(kb_root: Path) -> None:
+    _seed_symbols(kb_root)
+    rel = _write_code(kb_root, "equations/valid.sympy", "Eq(z, x_i)\n")
+    _upsert(
+        kb_root,
+        "Equation",
+        _prov({"id": "valid-eq", "code_language": "sympy", "code_path": rel}),
+    )
+
+    res = runner.invoke(app, ["code", "check", "--all", "--kb", str(kb_root), "--json"])
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["checked"] >= 1
+    assert payload["ok"] >= 1
+
+
 def test_sympy_expression_is_never_executed(kb_root: Path) -> None:
     """A hostile-looking expression must not reach the interpreter's builtins."""
     canary = kb_root / "canary.txt"
