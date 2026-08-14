@@ -299,3 +299,228 @@ def cmd_batch(
             f"{result['edges_upserted']} edges, {result['claims_upserted']} claims "
             f"upserted ({result['total_operations']} total operations)"
         )
+
+
+@graph_app.command("lint")
+def cmd_lint(
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Audit graph quality: check for floating nodes, Claim schema issues, and garbled symbols."""
+    g = _open_db(kb, json_output)
+    issues: list[dict[str, Any]] = []
+    try:
+        node_tables = [t for t in g.node_table_names() if not t.startswith("_")]
+        rel_tables = g.rel_table_names()
+
+        # 1. Floating node check
+        for nt in node_tables:
+            rows = g.execute(f"MATCH (n:{nt}) RETURN n.id AS id, n.name AS name")
+            for r in rows:
+                nid = r["id"]
+                connected = False
+                for rt in rel_tables:
+                    res1 = g.execute(
+                        f"MATCH (n:{nt} {{id: $id}})-[r:{rt}]->() RETURN count(r) AS c",
+                        {"id": nid},
+                    )
+                    res2 = g.execute(
+                        f"MATCH ()-[r:{rt}]->(n:{nt} {{id: $id}}) RETURN count(r) AS c",
+                        {"id": nid},
+                    )
+                    if res1[0]["c"] > 0 or res2[0]["c"] > 0:
+                        connected = True
+                        break
+                if not connected:
+                    issues.append(
+                        {
+                            "category": "floating_node",
+                            "severity": "warning",
+                            "id": nid,
+                            "node_type": nt,
+                            "message": f"Node {nt}:{nid} is floating with 0 relationship edges.",
+                        }
+                    )
+
+        # 2. Claim node checks
+        if "Claim" in node_tables:
+            claims = g.execute(
+                "MATCH (c:Claim) RETURN c.id AS id, c.name AS name, c.summary AS summary, "
+                "c.predicate AS predicate, c.sources AS sources"
+            )
+            for c in claims:
+                cid = c["id"]
+                name = c["name"] or ""
+                summary = c["summary"] or ""
+                predicate = c["predicate"] or ""
+                sources = c["sources"] or []
+
+                if not summary:
+                    issues.append(
+                        {
+                            "category": "claim_quality",
+                            "severity": "error",
+                            "id": cid,
+                            "node_type": "Claim",
+                            "message": f"Claim {cid} is missing 'summary' assertion sentence.",
+                        }
+                    )
+                if not name:
+                    issues.append(
+                        {
+                            "category": "claim_quality",
+                            "severity": "warning",
+                            "id": cid,
+                            "node_type": "Claim",
+                            "message": f"Claim {cid} is missing 'name' short label.",
+                        }
+                    )
+                elif len(name) > 80:
+                    issues.append(
+                        {
+                            "category": "claim_quality",
+                            "severity": "warning",
+                            "id": cid,
+                            "node_type": "Claim",
+                            "message": f"Claim {cid} 'name' is excessively long ({len(name)} chars); should be concise title.",
+                        }
+                    )
+                if not predicate:
+                    issues.append(
+                        {
+                            "category": "claim_quality",
+                            "severity": "error",
+                            "id": cid,
+                            "node_type": "Claim",
+                            "message": f"Claim {cid} is missing 'predicate'.",
+                        }
+                    )
+                if not sources:
+                    issues.append(
+                        {
+                            "category": "provenance",
+                            "severity": "error",
+                            "id": cid,
+                            "node_type": "Claim",
+                            "message": f"Claim {cid} is missing provenance 'sources'.",
+                        }
+                    )
+
+        # 3. Dynamic capability & schema property checks (symbol, code_status, provenance)
+        for nt in node_tables:
+            rows = g.execute(f"MATCH (n:{nt}) RETURN n.*")
+            for r in rows:
+                nid = r.get("n.id")
+                sources = r.get("n.sources")
+
+                # Provenance check (all domain nodes)
+                if sources is not None and (not sources or len(sources) == 0):
+                    issues.append(
+                        {
+                            "category": "provenance",
+                            "severity": "error",
+                            "id": nid,
+                            "node_type": nt,
+                            "message": f"Node {nt}:{nid} is missing required provenance 'sources'.",
+                        }
+                    )
+
+                # Symbol check: if table carries a 'symbol' property
+                if "n.symbol" in r:
+                    sym = r.get("n.symbol") or ""
+                    if sym and len(sym) > 30:
+                        issues.append(
+                            {
+                                "category": "symbol_quality",
+                                "severity": "warning",
+                                "id": nid,
+                                "node_type": nt,
+                                "message": f"Node {nt}:{nid} has an unusually long or concatenated symbol string: {sym!r}",
+                            }
+                        )
+
+                # Code status check: if table carries 'code_status' property
+                if "n.code_status" in r:
+                    status = r.get("n.code_status")
+                    if status and status == "failed":
+                        issues.append(
+                            {
+                                "category": "code_check",
+                                "severity": "warning",
+                                "id": nid,
+                                "node_type": nt,
+                                "message": f"Node {nt}:{nid} failed static code/symbol checking.",
+                            }
+                        )
+
+        # 4. Symbolic-Equation Audit (check if connected symbols appear in LaTeX formula)
+        if "Equation" in node_tables:
+            eq_rows = g.execute("MATCH (e:Equation) RETURN e.id AS id, e.latex AS latex")
+            for eq in eq_rows:
+                eqid = eq["id"]
+                latex = eq["latex"] or ""
+                if not latex:
+                    continue
+                clean_latex = latex.replace("\\", "").strip()
+
+                if "USES_SYMBOL" in rel_tables:
+                    symbols = g.execute(
+                        "MATCH (e:Equation {id: $id})-[:USES_SYMBOL]->(q) RETURN q.id AS qid, q.symbol AS symbol",
+                        {"id": eqid},
+                    )
+                    for s in symbols:
+                        sym = s["symbol"] or ""
+                        clean_sym = sym.replace("\\", "").strip()
+                        if clean_sym and clean_sym not in clean_latex:
+                            issues.append(
+                                {
+                                    "category": "symbolic_consistency",
+                                    "severity": "warning",
+                                    "id": eqid,
+                                    "node_type": "Equation",
+                                    "message": f"Equation {eqid} references symbol {s['qid']} ({sym!r}) which does not appear in LaTeX formula {latex!r}.",
+                                }
+                            )
+
+                for rel_name in ("EXPRESSED_BY", "DEFINED_BY"):
+                    if rel_name in rel_tables:
+                        lhs_nodes = g.execute(
+                            f"MATCH (q)-[:{rel_name}]->(e:Equation {{id: $id}}) RETURN q.id AS qid, q.symbol AS symbol",
+                            {"id": eqid},
+                        )
+                        for s in lhs_nodes:
+                            sym = s["symbol"] or ""
+                            clean_sym = sym.replace("\\", "").strip()
+                            if clean_sym and clean_sym not in clean_latex:
+                                issues.append(
+                                    {
+                                        "category": "symbolic_consistency",
+                                        "severity": "warning",
+                                        "id": eqid,
+                                        "node_type": "Equation",
+                                        "message": f"Equation {eqid} linked via {rel_name} to quantity {s['qid']} ({sym!r}) but symbol does not appear in LaTeX formula {latex!r}.",
+                                    }
+                                )
+    finally:
+        g.close()
+
+    ok = len([i for i in issues if i["severity"] == "error"]) == 0
+    result = {"ok": ok, "issue_count": len(issues), "issues": issues}
+
+    if json_output:
+        typer.echo(_json.dumps(result, indent=2))
+    else:
+        if not issues:
+            _console.print(
+                "[green]graph lint passed:[/green] 0 issues found across all nodes and edges."
+            )
+        else:
+            status = "[yellow]warnings found[/yellow]" if ok else "[red]errors found[/red]"
+            _console.print(f"graph lint ({status}, {len(issues)} issue(s)):")
+            for iss in issues:
+                color = "red" if iss["severity"] == "error" else "yellow"
+                _console.print(
+                    f"  [{color}]{iss['severity'].upper()}[/{color}] [{iss['category']}] {iss['message']}"
+                )
+        if not ok:
+            raise typer.Exit(code=1)

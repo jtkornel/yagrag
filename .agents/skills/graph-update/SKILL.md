@@ -29,6 +29,8 @@ Trigger this skill when:
     *   Update all edges pointing to/from the duplicate to point to the primary.
     *   Once all edges are moved, the duplicate is safely isolated (mark it as such in its summary).
 
+6.  **Run Quality Lint**: Always run `kb graph lint` after graph updates to ensure no floating nodes, malformed symbols, or Claim schema violations were introduced.
+
 ## Rules
 
 *   **Merge by ID**: The `kb graph upsert-*` commands work as "merge" operations based on the ID. Providing an existing ID will update that record instead of creating a new one.

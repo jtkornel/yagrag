@@ -310,3 +310,41 @@ def test_graph_batch_execution(kb_dir: Path) -> None:
         ["graph", "query", "MATCH (c:Concept {id: 'c10'}) RETURN c.name AS name", "--kb", str(kb_dir), "--json"],
     )
     assert json.loads(query_res.output)["rows"] == [{"name": "concept10"}]
+
+
+def test_graph_lint_command(kb_dir: Path) -> None:
+    # 1. Upsert a connected node
+    _upsert_concept(kb_dir, "c1")
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Document", "--props",
+         json.dumps({"id": "doc1", "name": "Doc 1", "origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+    runner.invoke(
+        app,
+        ["graph", "upsert-edge", "MENTIONS", "--from", "Document:doc1", "--to", "Concept:c1",
+         "--props", json.dumps({"origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+
+    # Lint should pass
+    res = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["issue_count"] == 0
+
+    # 2. Add a floating node
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Concept", "--props",
+         json.dumps({"id": "c_floating", "name": "Floating Concept", "origin": "raw", "sources": ["doc1"]}),
+         "--kb", str(kb_dir), "--json"],
+    )
+    res = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
+    assert res.exit_code == 0
+    payload = json.loads(res.output)
+    assert payload["ok"] is True  # warning severity
+    assert payload["issue_count"] == 1
+    assert payload["issues"][0]["category"] == "floating_node"
