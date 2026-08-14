@@ -45,6 +45,9 @@ If the type you want to attach code to is not statically checkable, that is a **
 
 *   **Files-Only Storage**: Snippets must reside in the `code/` tree. Never point `code_path` at a file that does not exist or sits outside the knowledge base directory.
 *   **Never Assume the Labels**: Which types are statically checkable comes from the schema, always. Do not rely on a memorised list — it differs per knowledge base and grows with every migration.
+*   **Symbolic-Equation Edge Discipline**: When linking an `Equation` node to `Quantity` nodes in the graph:
+    *   `DEFINED_BY` (`(Quantity)-[:DEFINED_BY]->(Equation)`): Connect only the single target output quantity on the left-hand side (LHS) computed by the equation.
+    *   `USES_SYMBOL` (`(Equation)-[:USES_SYMBOL]->(Quantity)`): Connect all input terms/quantities appearing inside the expression or formula.
 *   **LaTeX Parity**: If the type also declares a `latex` property (as `Equation` does in the seed schema), always maintain it alongside the SymPy representation. The SymPy form is for checking; LaTeX is for display.
 *   **Symbol Consistency**: In SymPy snippets, prefer symbols that match the `symbol`, `id` or `name` of a symbol-bearing node. An unrecognised symbol is reported as a *warning* only — if the symbol is legitimate, either accept the warning or add the missing symbol-bearing node.
 *   **Only Parse Errors Fail**: `failed` means a missing file, a `code_path` outside the KB, or a genuine parse/syntax error. Unknown symbols and lint findings never flip the status; an unrecognised `code_language` yields `unchecked`.

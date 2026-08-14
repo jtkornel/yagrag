@@ -16,7 +16,7 @@ Trigger this skill when:
 
 1.  **Read Text**: Run `kb doc text <id>` to retrieve the full content of the document.
 2.  **Identify Entities**: Scan the text for nodes matching the seed schema. Look for:
-    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Variable` (identify domain and dimension), `Quantity` (capture symbol and unit).
+    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, and variables like $v_x$, $\omega_z$, $f_r$, $B_s$), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
     *   **Models**: `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
     *   **Architecture**: `StateEstimator` (e.g., EKF, iSAM2), `Solver` (e.g., Levenberg-Marquardt), `Robot`, `Sensor`.
     *   **Academic**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`.
@@ -39,7 +39,9 @@ Trigger this skill when:
 
 *   **No Prose Summaries**: A document summary is a failure. You must extract the underlying structured facts.
 *   **Mandatory Provenance**: Every `upsert-node`, `upsert-edge`, and `upsert-claim` MUST include `origin` and `sources` in its properties.
-*   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type.
+*   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
+*   **Symbol Sanitization**: For `Variable` and `Quantity` nodes, `symbol` must contain ONLY the clean LaTeX symbol string for that specific entity (e.g. `"B_s"`, `"f_r"`), never concatenated or combined multi-variable text.
+*   **Zero Floating Nodes**: Every extracted `Equation`, `Algorithm`, `Variable`, `Quantity`, or `Dataset` must be linked to its parent model, estimator, or paper via domain relationships.
 *   **LaTeX for Equations**: Always capture equations in their raw LaTeX format to allow for future mathematical reasoning.
 *   **Machine-Checkable Code**: Whenever you can, provide a SymPy form for equations or a Python 3.11 implementation for algorithms. However, missing or uncheckable code NEVER blocks ingestion; an `Equation` with only `latex` is still a valid and useful node. Refer to `code-representation` for how to store and check these snippets.
 *   **Unit Awareness**: When extracting `Quantity` nodes, always include the `unit` and `symbol` properties if present.
