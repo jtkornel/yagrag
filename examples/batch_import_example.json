@@ -1,0 +1,85 @@
+[
+  {
+    "op": "node",
+    "label": "Method",
+    "props": {
+      "id": "method-example-slam",
+      "name": "Example Wheel-Inertial SLAM",
+      "summary": "Tightly-coupled factor graph SLAM combining wheel odometry and IMU preintegration.",
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  },
+  {
+    "op": "node",
+    "label": "Quantity",
+    "props": {
+      "id": "qty-yaw-rate",
+      "name": "Yaw angular velocity",
+      "symbol": "omega_z",
+      "unit": "rad/s",
+      "summary": "Robot body yaw angular rate denoted by symbol omega_z.",
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  },
+  {
+    "op": "node",
+    "label": "Equation",
+    "props": {
+      "id": "eq-yaw-rate-kinematics",
+      "name": "Differential drive yaw rate",
+      "latex": "\\omega_z = \\frac{r (\\omega_r - \\omega_l)}{B}",
+      "code_language": "sympy",
+      "code_path": "code/equations/raw-0001/yaw_rate_kinematics.sympy",
+      "code_entry": "omega_z",
+      "summary": "Yaw rate formula for differential drive wheeled mobile robots.",
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  },
+  {
+    "op": "edge",
+    "rel": "DEFINES",
+    "from": "Document:raw-0001",
+    "to": "Method:method-example-slam",
+    "props": {
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  },
+  {
+    "op": "edge",
+    "rel": "DEFINED_BY",
+    "from": "Quantity:qty-yaw-rate",
+    "to": "Equation:eq-yaw-rate-kinematics",
+    "props": {
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  },
+  {
+    "op": "claim",
+    "id": "claim-example-drift-rate",
+    "subject": "Method:method-example-slam",
+    "predicate": "achieves_drift_rate",
+    "object_literal": "0.8% of total distance",
+    "props": {
+      "name": "Wheel-inertial SLAM drift rate",
+      "summary": "The proposed tightly-coupled wheel-inertial SLAM method achieves 0.8% drift rate over 5 km test trajectories.",
+      "origin": "raw",
+      "sources": ["raw-0001"],
+      "confidence": 0.95
+    }
+  },
+  {
+    "op": "edge",
+    "rel": "SUPPORTS",
+    "from": "Document:raw-0001",
+    "to": "Claim:claim-example-drift-rate",
+    "props": {
+      "origin": "raw",
+      "sources": ["raw-0001"]
+    }
+  }
+]
