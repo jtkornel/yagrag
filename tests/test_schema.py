@@ -292,3 +292,28 @@ def test_cli_schema_show_gql(kb_dir: Path) -> None:
     assert "CREATE GRAPH TYPE KnowledgeBaseGraphType AS {" in result.output
     assert "NODE TYPE Document" in result.output
     assert "EDGE TYPE MENTIONS" in result.output
+
+
+def test_system_migrations_include_acronym_support(kb_dir: Path) -> None:
+    # Copy all root schema/migrations to test kb
+    repo_root = Path(__file__).resolve().parent.parent
+    src_mig_dir = repo_root / "schema" / "migrations"
+    dst_mig_dir = kb_dir / "schema" / "migrations"
+    for p in src_mig_dir.glob("*.gql"):
+        (dst_mig_dir / p.name).write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+
+    result = runner.invoke(app, ["schema", "apply", "--kb", str(kb_dir), "--json"])
+    assert result.exit_code == 0
+    applied = json.loads(result.output)["applied"]
+    assert "0004_add_acronym_support" in applied
+
+    validate_res = runner.invoke(app, ["schema", "validate", "--kb", str(kb_dir), "--json"])
+    assert validate_res.exit_code == 0
+    assert json.loads(validate_res.output)["ok"] is True
+
+    show_res = runner.invoke(app, ["schema", "show", "--kb", str(kb_dir), "--json"])
+    assert show_res.exit_code == 0
+    schema = Schema.model_validate_json(show_res.output)
+    assert "Acronym" in schema.node_type_names()
+    assert "USES_ACRONYM" in schema.relation_type_names()
+    assert "STANDS_FOR" in schema.relation_type_names()

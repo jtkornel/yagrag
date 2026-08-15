@@ -134,7 +134,7 @@ def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
 
 
 def _entity_details(g: GraphDB, label: str, entity_id: str) -> dict[str, Any]:
-    """Fetch an entity's properties plus any claims about it."""
+    """Fetch an entity's properties plus any claims and acronyms linked to it."""
     rows = g.execute(
         f"MATCH (n:{label} {{id: $id}}) RETURN n.id AS id, n.name AS name, "
         "coalesce(n.summary, '') AS summary, n.origin AS origin, "
@@ -144,6 +144,20 @@ def _entity_details(g: GraphDB, label: str, entity_id: str) -> dict[str, Any]:
     if not rows:
         return {"label": label, "id": entity_id}
     detail: dict[str, Any] = {"label": label, **rows[0]}
+    if label == "Acronym":
+        info: list[dict[str, Any]] = []
+        with contextlib.suppress(Exception):
+            info = g.execute(
+                "MATCH (a:Acronym {id: $id}) RETURN a.short_form AS short_form, "
+                "a.expansion AS expansion, a.domain_context AS domain_context",
+                {"id": entity_id},
+            )
+        if info:
+            detail["short_form"] = info[0].get("short_form")
+            detail["expansion"] = info[0].get("expansion")
+            if info[0].get("domain_context"):
+                detail["domain_context"] = info[0].get("domain_context")
+
     try:
         claims = g.execute(
             f"MATCH (cl:Claim)-[:ABOUT]->(n:{label} {{id: $id}}) "
@@ -152,9 +166,20 @@ def _entity_details(g: GraphDB, label: str, entity_id: str) -> dict[str, Any]:
             "cl.sources AS sources, cl.confidence AS confidence",
             {"id": entity_id},
         )
-    except RuntimeError:
+    except (RuntimeError, Exception):
         claims = []  # no Claim/ABOUT tables in this schema
     detail["claims"] = claims
+
+    acronyms: list[dict[str, Any]] = []
+    with contextlib.suppress(Exception):
+        acronyms = g.execute(
+            f"MATCH (n:{label} {{id: $id}})-[:USES_ACRONYM]->(a:Acronym) "
+            "RETURN a.id AS id, a.short_form AS short_form, a.expansion AS expansion",
+            {"id": entity_id},
+        )
+    if acronyms:
+        detail["acronyms"] = acronyms
+
     return detail
 
 

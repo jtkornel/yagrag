@@ -537,6 +537,48 @@ def cmd_lint(
                                         "message": f"Equation {eqid} linked via {rel_name} to quantity {s['qid']} ({sym!r}) but symbol does not appear in LaTeX formula {latex!r}.",
                                     }
                                 )
+
+        # 5. Acronym node audit
+        if "Acronym" in node_tables:
+            acronyms = g.execute(
+                "MATCH (a:Acronym) RETURN a.id AS id, a.name AS name, "
+                "coalesce(a.short_form, '') AS short_form, "
+                "coalesce(a.expansion, '') AS expansion"
+            )
+            for acr in acronyms:
+                aid = acr["id"]
+                short_form = (acr.get("short_form") or "").strip()
+                expansion = (acr.get("expansion") or "").strip()
+                if not short_form:
+                    issues.append(
+                        {
+                            "category": "acronym_quality",
+                            "severity": "error",
+                            "id": aid,
+                            "node_type": "Acronym",
+                            "message": f"Acronym {aid} is missing 'short_form' property.",
+                        }
+                    )
+                elif short_form.startswith("(") and short_form.endswith(")"):
+                    issues.append(
+                        {
+                            "category": "acronym_quality",
+                            "severity": "warning",
+                            "id": aid,
+                            "node_type": "Acronym",
+                            "message": f"Acronym {aid} short_form {short_form!r} has redundant enclosing parentheses.",
+                        }
+                    )
+                if not expansion:
+                    issues.append(
+                        {
+                            "category": "acronym_quality",
+                            "severity": "error",
+                            "id": aid,
+                            "node_type": "Acronym",
+                            "message": f"Acronym {aid} is missing 'expansion' property.",
+                        }
+                    )
     finally:
         g.close()
 
@@ -609,6 +651,8 @@ def cmd_dedupe(
                 summary = props.get("summary") or ""
                 sources = props.get("sources") or []
                 symbol = props.get("symbol")
+                short_form = props.get("short_form")
+                expansion = props.get("expansion")
                 nodes.append(
                     {
                         "id": nid,
@@ -616,6 +660,8 @@ def cmd_dedupe(
                         "summary": summary,
                         "sources": sources,
                         "symbol": symbol,
+                        "short_form": short_form,
+                        "expansion": expansion,
                         "row": props,
                     }
                 )
@@ -641,6 +687,14 @@ def cmd_dedupe(
                         n1.get("symbol")
                         and n2.get("symbol")
                         and n1["symbol"].strip() != n2["symbol"].strip()
+                    ):
+                        continue
+
+                    # For acronym nodes, distinct short forms must never be merged
+                    if (
+                        n1.get("short_form")
+                        and n2.get("short_form")
+                        and n1["short_form"].strip().upper() != n2["short_form"].strip().upper()
                     ):
                         continue
 

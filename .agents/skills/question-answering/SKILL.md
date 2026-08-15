@@ -16,7 +16,7 @@ Trigger this skill when:
 ## Steps
 
 1.  **Search the Index**: Run `kb search '<query>' --json` to find relevant raw documents and specific graph nodes. This provides the first layer of context.
-2.  **Query the Graph**: Based on search results, run `kb graph query '<cypher>'` to find relationships, claims, and technical details. Use Cypher to traverse the domain layer (e.g., `StateEstimator` → `MotionModel` → `Equation`).
+2.  **Query the Graph**: Based on search results, run `kb graph query '<cypher>'` to find relationships, claims, and technical details. Use Cypher to traverse the domain layer (e.g., `StateEstimator` → `MotionModel` → `Equation`) and acronym links (`USES_ACRONYM` / `STANDS_FOR`) to resolve domain abbreviations.
 3.  **Inspect Claims**: Look specifically for `Claim` nodes and their associated `SUPPORTS` or `CONTRADICTS` edges. Surface the specific document IDs attached to these edges.
 4.  **Synthesize Answer**:
     *   State the answer clearly in the second person ("you").

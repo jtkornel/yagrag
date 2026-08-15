@@ -26,6 +26,7 @@ kb graph lint
     *   **Claim violations**: Flags claims missing `summary` assertions, missing predicates, or with excessively long `name` labels.
     *   **Symbol anomalies**: Flags corrupted, concatenated, or missing LaTeX symbols.
     *   **Symbolic consistency**: Verifies that quantities and variables connected via `EXPRESSED_BY` or `USES_SYMBOL` appear in the equation's LaTeX formula.
+    *   **Acronym quality**: Flags `Acronym` nodes missing `short_form` or `expansion`, or having redundant enclosing parentheses in `short_form`.
     *   **Code status**: Flags checkable nodes with failed AST or SymPy syntax checks.
 
 ### 2. Document & Citation Maintenance (`kb doc clean`)
@@ -56,7 +57,7 @@ kb graph dedupe --label Tool
 kb graph dedupe --apply
 ```
 *   **What it does**:
-    *   Clusters near-duplicate entities using token overlap ($\ge 0.85$) while protecting distinct symbols on mathematical nodes (`Quantity`).
+    *   Clusters near-duplicate entities using token overlap ($\ge 0.85$) while protecting distinct symbols on mathematical nodes (`Quantity`) and distinct short forms on `Acronym` nodes.
     *   Selects the canonical node based on highest connected graph degree and metadata richness.
     *   Re-routes all incoming and outgoing edges (`USES`, `EVALUATED_ON`, `IMPLEMENTS`, `ABOUT`, `EXPRESSED_BY`) to the canonical node.
     *   Combines `sources` lists (strict union) and deletes the duplicate entity.
@@ -88,6 +89,7 @@ Run the unified quality gating check across linter and test suite:
 *   **Dry-Run First**: Always inspect proposed changes with dry-run commands before executing with `--apply`.
 *   **Non-Destructive Provenance**: Merging nodes must always take the **union** of their `sources` lists. Citing document references must never be deleted.
 *   **Symbol Protection**: Never merge two `Quantity` nodes if their `symbol` properties differ, even if their titles sound similar (e.g., $F_R$ thrust vs. $f_r$ resistance coefficient).
+*   **Acronym Disambiguation Protection**: Never merge two `Acronym` nodes if their `short_form` properties differ (e.g. `EKF` vs `UKF`).
 *   **Re-Lint After Cleanups**: Always conclude maintenance by running `kb graph lint` to verify that 0 warnings or errors remain.
 
 ## Example Session

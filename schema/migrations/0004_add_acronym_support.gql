@@ -1,0 +1,6 @@
+-- Add Acronym node type and USES_ACRONYM / STANDS_FOR relation types for domain-agnostic acronym support.
+
+CREATE NODE TYPE Acronym (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, short_form STRING, expansion STRING, domain_context STRING);
+
+CREATE EDGE TYPE USES_ACRONYM (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE STANDS_FOR (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);

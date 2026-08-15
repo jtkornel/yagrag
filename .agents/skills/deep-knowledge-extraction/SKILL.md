@@ -19,7 +19,8 @@ Trigger this skill when:
     *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
     *   **Models**: `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
     *   **Architecture**: `StateEstimator` (e.g., EKF, iSAM2), `Solver` (e.g., Levenberg-Marquardt), `Robot`, `Sensor`.
-    *   **Academic**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`.
+    *   **Academic & Conceptual**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`, `Concept`.
+    *   **Linguistic & Terminological**: `Acronym` (capture `short_form`, `expansion`, `domain_context`, and `summary`; e.g., `short_form: "SLAM"`, `expansion: "Simultaneous Localization and Mapping"`; ID convention: `acronym:<short_slug>:<expansion_slug>`).
 3.  **Upsert Nodes**: For each entity, run `kb graph upsert-node <Label> --props '...'`. 
     *   **Crucial**: Every node MUST include `origin: "raw"` and `sources: ["<doc_id>"]`.
     *   **Code Representation**: For nodes supporting it (e.g., `Equation`, `Algorithm`), write the checkable snippet to the `code/` directory (using document/source namespacing for paper-specific snippets, e.g., `code/equations/<doc_id>/<slug>.sympy` and `code/algorithms/<doc_id>/<slug>.py`) and run `kb code check` after upserting. Refer to the `code-representation` skill for the formal specification. Do NOT include paper equation numbers in snippet comments; store paper equation references in the node's `summary` or properties.
@@ -36,12 +37,14 @@ Trigger this skill when:
     *   Run `kb graph upsert-claim <claim_id> --subject <Label:id> --predicate <str> --props '{"name": "<Short Label>", "summary": "<Full Assertion Sentence>", "origin": "raw", "sources": ["<doc_id>"], "confidence": 0.9}'` (or include `"op": "claim"` in `kb graph batch`).
     *   Use `--object-literal` for quantitative results or `--object Label:id` for relationships between entities.
 5.  **Establish Relations**: Link the `Document` node to its contents and other documents:
-    *   `DEFINES`: For new concepts or models introduced by the document.
-    *   `MENTIONS`: For existing concepts or related work cited.
+    *   `DEFINES`: For new concepts, models, or acronym definitions introduced by the document (e.g., `(Document)-[:DEFINES]->(Acronym)`).
+    *   `MENTIONS`: For existing concepts, related work cited, or established acronyms used in the text (e.g., `(Document)-[:MENTIONS]->(Acronym)`).
     *   `SUPPORTS`: To link the `Document` to the `Claim` nodes it asserts.
     *   `CITES`: To link the `Document` node to other `Document` nodes when the paper directly references another document present in the knowledge base (e.g., `(citing_doc)-[:CITES]->(cited_doc)`).
-6.  **Cross-Link Domain (Zero Floating Nodes)**: Connect domain entities directly:
+6.  **Cross-Link Domain & Acronyms (Zero Floating Nodes)**: Connect domain entities directly:
     *   `StateEstimator` --`USES`--> `Algorithm` / `Method` / `MotionModel` / `SensorModel` / `FactorGraph` / `Solver`.
+    *   `Any Node` --`USES_ACRONYM`--> `Acronym`: Link any method, estimator, model, algorithm, equation, dataset, or concept whose definition/text uses the acronym.
+    *   `Acronym` --`STANDS_FOR`--> `Concept` / `StateEstimator` / `Method`: Link the acronym to the formal domain entity it represents.
     *   `Quantity` --`DEFINED_BY`--> `Equation`: Use `DEFINED_BY` strictly when the `Equation` computes or defines this target output quantity (left-hand side / LHS).
     *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms, intermediate symbols, normalization constants, and sub-expression parameters appearing inside its expression.
     *   `FactorGraph` --`HAS_VARIABLE`--> `Variable`, `FactorGraph` --`HAS_FACTOR`--> `Factor`.

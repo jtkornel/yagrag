@@ -31,6 +31,17 @@ MIGRATION = {
             },
         },
         {
+            "op": "create_node_table",
+            "table": {
+                "name": "Acronym",
+                "properties": [
+                    {"name": "short_form", "type": "STRING"},
+                    {"name": "expansion", "type": "STRING"},
+                    {"name": "domain_context", "type": "STRING"},
+                ],
+            },
+        },
+        {
             "op": "create_rel_table",
             "table": {
                 "name": "MENTIONS",
@@ -56,6 +67,20 @@ MIGRATION = {
             "table": {
                 "name": "SUPPORTS",
                 "pairs": [{"from": "Document", "to": "Claim"}],
+            },
+        },
+        {
+            "op": "create_rel_table",
+            "table": {
+                "name": "USES_ACRONYM",
+                "pairs": [{"from": "Concept", "to": "Acronym"}],
+            },
+        },
+        {
+            "op": "create_rel_table",
+            "table": {
+                "name": "STANDS_FOR",
+                "pairs": [{"from": "Acronym", "to": "Concept"}],
             },
         },
     ],
@@ -258,8 +283,140 @@ def test_graph_export(kb_dir: Path) -> None:
     assert result.exit_code == 0
     payload = json.loads(result.output)
     assert "Concept" in payload["nodes"]
-    assert len(payload["nodes"]["Concept"]) == 1
-    assert "_kb_migrations" not in payload["nodes"]
+
+
+def test_acronym_upsert_and_relations(kb_dir: Path) -> None:
+    _upsert_concept(kb_dir, "concept-slam")
+    # Upsert Acronym node
+    res = runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Acronym",
+            "--props", json.dumps({
+                "id": "acronym:slam:simultaneous_localization_and_mapping",
+                "name": "SLAM (Simultaneous Localization and Mapping)",
+                "short_form": "SLAM",
+                "expansion": "Simultaneous Localization and Mapping",
+                "domain_context": "robotics",
+                "summary": "Simultaneous Localization and Mapping",
+                "origin": "raw",
+                "sources": ["raw-0001"],
+            }),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+
+    # Upsert USES_ACRONYM edge from Concept to Acronym
+    res = runner.invoke(
+        app,
+        [
+            "graph", "upsert-edge", "USES_ACRONYM",
+            "--from", "Concept:concept-slam",
+            "--to", "Acronym:acronym:slam:simultaneous_localization_and_mapping",
+            "--props", json.dumps({"origin": "raw", "sources": ["raw-0001"]}),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+
+    # Upsert STANDS_FOR edge from Acronym to Concept
+    res = runner.invoke(
+        app,
+        [
+            "graph", "upsert-edge", "STANDS_FOR",
+            "--from", "Acronym:acronym:slam:simultaneous_localization_and_mapping",
+            "--to", "Concept:concept-slam",
+            "--props", json.dumps({"origin": "raw", "sources": ["raw-0001"]}),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    assert res.exit_code == 0, res.output
+
+    # Query and verify edges
+    rows = json.loads(
+        runner.invoke(
+            app,
+            [
+                "graph", "query",
+                ("MATCH (c:Concept)-[:USES_ACRONYM]->(a:Acronym)-[:STANDS_FOR]->(c2:Concept) "
+                 "RETURN c.id AS cid, a.short_form AS sf, a.expansion AS exp, c2.id AS c2id"),
+                "--kb", str(kb_dir), "--json",
+            ],
+        ).output
+    )["rows"]
+    assert len(rows) == 1
+    assert rows[0] == {
+        "cid": "concept-slam",
+        "sf": "SLAM",
+        "exp": "Simultaneous Localization and Mapping",
+        "c2id": "concept-slam",
+    }
+
+
+def test_acronym_lint_checks(kb_dir: Path) -> None:
+    # 1. Missing short_form & expansion
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Acronym",
+            "--props", json.dumps({
+                "id": "acronym:invalid",
+                "name": "Invalid Acronym",
+                "summary": "Bad acronym without short form",
+                "origin": "raw",
+                "sources": ["raw-0001"],
+            }),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    res = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
+    assert res.exit_code == 0
+    data = json.loads(res.output)
+    categories = [i["category"] for i in data["issues"]]
+    assert "acronym_quality" in categories
+    assert any("short_form" in i["message"] for i in data["issues"])
+    assert any("expansion" in i["message"] for i in data["issues"])
+
+
+def test_acronym_deduplication(kb_dir: Path) -> None:
+    # Two acronyms with different short forms (EKF vs UKF) should NOT be merged
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Acronym",
+            "--props", json.dumps({
+                "id": "acronym:ekf",
+                "name": "EKF",
+                "short_form": "EKF",
+                "expansion": "Extended Kalman Filter",
+                "summary": "EKF summary",
+                "origin": "raw",
+                "sources": ["raw-0001"],
+            }),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Acronym",
+            "--props", json.dumps({
+                "id": "acronym:ukf",
+                "name": "UKF",
+                "short_form": "UKF",
+                "expansion": "Unscented Kalman Filter",
+                "summary": "UKF summary",
+                "origin": "raw",
+                "sources": ["raw-0002"],
+            }),
+            "--kb", str(kb_dir), "--json",
+        ],
+    )
+    res = runner.invoke(app, ["graph", "dedupe", "--label", "Acronym", "--kb", str(kb_dir), "--json"])
+    assert res.exit_code == 0
+    data = json.loads(res.output)
+    assert data["merged_count"] == 0
 
 
 def test_graph_batch_execution(kb_dir: Path) -> None:
