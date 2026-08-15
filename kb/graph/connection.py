@@ -8,9 +8,12 @@ version or another embedded graph engine later.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+from ..config import KBConfig
 
 try:
     import kuzu  # type: ignore
@@ -33,6 +36,20 @@ def _require_kuzu() -> None:
         ) from _KUZU_IMPORT_ERROR
 
 
+def _resolve_db_path(db_path: Path | str) -> Path:
+    """Resolve a path to the actual Kuzu DB directory.
+
+    If given a KB root directory containing `kb.toml`, reads the configured
+    `graph_db` path; otherwise treats `db_path` directly as the DB directory.
+    """
+    p = Path(db_path).expanduser().resolve()
+    if (p / "kb.toml").is_file():
+        config = KBConfig.load(p)
+        p = p / config.paths.graph_db
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 class GraphDB:
     """A handle to a Kuzu database directory.
 
@@ -41,12 +58,10 @@ class GraphDB:
     context-manager use.
     """
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path | str):
         _require_kuzu()
-        db_path = db_path.expanduser().resolve()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
-        self._db = kuzu.Database(str(db_path))
+        self.db_path = _resolve_db_path(db_path)
+        self._db = kuzu.Database(str(self.db_path))
         self._conn = kuzu.Connection(self._db)
 
     # --- lifecycle -----------------------------------------------------------
@@ -57,7 +72,7 @@ class GraphDB:
         self._conn = None  # type: ignore
         self._db = None  # type: ignore
 
-    def __enter__(self) -> "GraphDB":
+    def __enter__(self) -> GraphDB:
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -99,13 +114,16 @@ class GraphDB:
 
     def table_info(self, name: str) -> list[dict[str, Any]]:
         """Return per-property info for a table."""
-        # TABLE_INFO returns: property id, name, type, default expression, primary key
         return self.execute(f'CALL TABLE_INFO("{name}") RETURN *')
 
 
 @contextmanager
-def open_graph(db_path: Path) -> Iterator[GraphDB]:
-    """Open a `GraphDB` as a context manager."""
+def open_graph(db_path: Path | str) -> Iterator[GraphDB]:
+    """Open a `GraphDB` as a context manager.
+
+    Accepts either a direct path to the Kuzu DB directory or the KB root
+    directory (containing kb.toml).
+    """
     g = GraphDB(db_path)
     try:
         yield g
