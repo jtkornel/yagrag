@@ -216,8 +216,20 @@ def cmd_query(
     if json_output:
         typer.echo(_json.dumps({"rows": rows}, indent=2))
     else:
-        for row in rows:
-            _console.print(row)
+        if not rows:
+            _console.print("[dim]0 rows returned[/dim]")
+            return
+        if all(isinstance(r, dict) for r in rows):
+            table = Table(show_header=True, header_style="bold cyan")
+            cols = list(rows[0].keys())
+            for col in cols:
+                table.add_column(str(col))
+            for r in rows:
+                table.add_row(*[str(r.get(c, "")) for c in cols])
+            _console.print(table)
+        else:
+            for row in rows:
+                _console.print(row)
 
 
 @graph_app.command("export")
