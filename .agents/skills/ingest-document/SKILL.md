@@ -49,7 +49,8 @@ kb doc add papers/gtsam_manual.pdf --kind raw --title "GTSAM Manual" --tag "fact
 # Verify the text was extracted
 kb doc text raw-0001 | head -n 20
 
-# Create the node in the graph
+# Optional: 'kb doc add' automatically creates the Document node in the graph;
+# 'kb graph upsert-node Document' can be used to enrich additional metadata if needed:
 kb graph upsert-node Document --props '{
   "id": "raw-0001",
   "name": "GTSAM Manual",

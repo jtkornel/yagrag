@@ -18,7 +18,7 @@ Trigger this skill when:
 1.  **Search First**: Before creating a new node, run `kb graph query` or `kb search` to see if the concept already exists. Use stable, slug-like IDs (e.g., `tool_gtsam`) rather than random UUIDs.
 2.  **Reconcile Entities**:
     *   **If it exists**: Do not create a new node. Instead, update the existing node to include the new `doc_id` in its `sources` array. You should also merge or append to the `summary` property if the new document provides better context.
-    *   **If it's new**: Use `kb graph upsert-node` to create the initial record.
+    *   **If it's new**: Use `kb graph upsert-node` to create the initial record (or `kb graph batch --file <payload.json>` for bulk operations).
 3.  **Handle Claims**: If a new claim contradicts an existing one (e.g., two papers claim different accuracy for the same method):
     *   Store **both** claims as separate nodes with their own unique IDs.
     *   Ensure each claim has its own `origin`, `sources`, and `confidence` properties.
