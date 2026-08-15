@@ -122,7 +122,7 @@ per-tool configuration. If your agent only scans its own directory, symlink or c
 **Wikidata, not Wikipedia**: the goal is a graph of structured facts *inside* documents — not a fuzzy
 “what this paper is about” summary.
 
-The seed schema in `schema/migrations/0001_seed_domain.json` defines **29 node types** and **28 relation types**,
+The seed schema in `schema/migrations/0001_seed_domain.gql` defines **29 node types** and **28 relation types**,
 organised in **three layers**. The first two are generic and reusable in any research field; the third is
 domain-specific and meant to be replaced when you model a different domain.
 
@@ -264,7 +264,7 @@ The system follows a staged path towards verified knowledge:
 
 Schema evolves via versioned, numbered migrations:
 
-- `kb schema migrate` scaffolds a numbered empty JSON migration in `schema/migrations/`.
+- `kb schema migrate` scaffolds a numbered empty `.gql` migration in `schema/migrations/`.
 - `kb schema apply` applies all pending migrations **idempotently**.
 - `kb schema validate` checks the database against the target schema.
 - `kb schema status` lists applied vs pending migrations.
@@ -272,9 +272,10 @@ Schema evolves via versioned, numbered migrations:
 Migrations are append-only and never edited once applied.
 
 Supported migration operations:
-- `create_node_table`: Declare a new node table and properties.
-- `create_rel_table`: Declare a new relation table and allowed pairs.
-- `add_rel_pair`: Extend an existing relation table with new allowed `(from, to)` pairs via Kùzu `ALTER TABLE`.
+- Native `.gql` migrations: Direct ISO GQL / openCypher DDL statements.
+- `create_node_table`: Declare a new node table and properties (legacy JSON).
+- `create_rel_table`: Declare a new relation table and allowed pairs (legacy JSON).
+- `add_rel_pair`: Extend an existing relation table with new allowed `(from, to)` pairs (legacy JSON).
 - `cypher`: Execute raw DDL/DML Cypher statements verbatim.
 
 ### CLI reference
