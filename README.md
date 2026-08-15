@@ -20,13 +20,16 @@ relations), not just bibliographic links between documents. See the plan in
 
 ### Status
 
-First milestone complete (feature-complete for this stage):
+Current feature set:
 
 - **Deterministic CLI (`kb`)**: scriptable, offline, provenance-enforced operations with **no LLM calls**.
-- **Document store**: raw immutable ingestion + synthesized documents with provenance.
-- **Embedded property graph (Grafeo) + layered seed schema**: a domain-appropriate property graph with ISO GQL / openCypher support and a reified `Claim` pattern.
-- **Hybrid retrieval**: embeddings + full-text + graph context bundles via `kb search`.
-- **Agent skills**: structured `.md` skill files that drive reasoning purely by invoking the CLI.
+- **Document store & citation engine**: raw immutable ingestion, PDF/MD text extraction, and automated citation tracking (`kb doc cite`, `kb doc clean`, `kb doc stubs`).
+- **Embedded property graph (Grafeo) + ISO GQL schema**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
+- **Cross-cutting terminological layer**: domain-agnostic `Acronym` support with polysemy disambiguation, `USES_ACRONYM` references, and `STANDS_FOR` concept links.
+- **Statically checkable mathematics & algorithms**: SymPy-verified expressions (`.sympy`), Python reference implementations (`.py`), and mathematical derivation tools (`kb math derive`, `kb math glossary`).
+- **Graph quality audit & maintenance**: non-destructive entity deduplication (`kb graph dedupe`) and structural graph linting (`kb graph lint`).
+- **Hybrid retrieval**: vector search + full-text search + graph context bundles via `kb search`.
+- **Agent skills**: 10 modular skills in `.agents/skills/` adhering to the open Agent Skills standard.
 
 ### Quickstart (for developers)
 
@@ -122,27 +125,34 @@ per-tool configuration. If your agent only scans its own directory, symlink or c
 **Wikidata, not Wikipedia**: the goal is a graph of structured facts *inside* documents — not a fuzzy
 “what this paper is about” summary.
 
-The seed schema in `schema/migrations/0001_seed_domain.gql` defines **29 node types** and **28 relation types**,
-organised in **three layers**. The first two are generic and reusable in any research field; the third is
-domain-specific and meant to be replaced when you model a different domain.
+The schema in `schema/migrations/` defines node and relation types organized in **four conceptual layers**.
+The upper layers are generic and reusable across all scientific and technical domains; the domain layer is
+customizable to the specific field:
 
-- **Layer 1: document/bibliographic layer** (general, reusable across research fields)
+- **Layer 1: Document & Bibliographic Layer** (general, reusable across research fields)
   - Node types: `Document`, `Author`, `Venue`
   - Relation types: `CITES`, `AUTHORED_BY`, `PUBLISHED_IN`, `DERIVED_FROM`, `MENTIONS`, `DEFINES`, `SUPPORTS`, `CONTRADICTS`
+  - Features: Automatic citation stubs, DOI/arXiv canonicalization, and citing provenance aggregation.
 
-- **Layer 2: reified claim layer** (general, reusable across research fields)
-  - Node types: `Claim` — a claim is its own node, carrying subject–predicate–object semantic triples, qualifiers, confidence and sources as properties.
+- **Layer 1.5: Cross-Cutting Terminological & Acronym Layer** (domain-agnostic linguistic layer)
+  - Node types: `Acronym` (captures `short_form`, `expansion`, `domain_context`, `summary`)
+  - Relation types:
+    - `USES_ACRONYM`: Links any domain node (Method, StateEstimator, Algorithm, Dataset, Equation) to an acronym used in its title or descriptive text.
+    - `STANDS_FOR`: Connects an acronym directly to the formal domain concept or entity it represents.
+    - `DEFINES` / `MENTIONS`: Records whether a paper introduces or merely uses an abbreviation.
+  - Identity & Disambiguation: Uses deterministic compound keys (`acronym:<short_slug>:<expansion_slug>`), allowing multiple distinct meanings of the same short form (e.g. SLAM or PCA) to coexist without collision.
+
+- **Layer 2: Reified Claim Layer** (general, reusable across research fields)
+  - Node types: `Claim` — a claim is its own node carrying subject–predicate–object semantic triples, qualifiers, confidence, and source provenance.
   - Property discipline:
     - `name`: Short label or title (max 5–10 words, e.g. `"Slip-track EKF drift bound"`).
     - `summary`: Full, self-contained natural language assertion sentence capturing context, conditions, and quantitative findings.
-  - Relation types: `ABOUT`/`HAS_OBJECT` link a claim to its subject and object, which may be a node from any layer; documents attach via `SUPPORTS`/`CONTRADICTS`.
-  - It sits *above* the entity layers: it says who asserts what about the entities they contain, rather than
-    adding domain entities of its own, so swapping the domain layer leaves it unchanged.
-  - This makes conflicting assertions from different sources coexist with full provenance instead of being flattened.
+  - Relation types: `ABOUT`/`HAS_OBJECT` link a claim to its subject and object (nodes from any layer); documents attach via `SUPPORTS`/`CONTRADICTS`.
+  - Conflicting assertions from different papers coexist with full provenance rather than being flattened.
 
-- **Layer 3: deep domain knowledge** (models internals of sensor fusion / factor graphs / UGV navigation)
-  - Node types: `FactorGraph`, `Variable`, `Factor`, `StateEstimator`, `MotionModel`, `SensorModel`, `NoiseModel`, `Sensor`, `Solver`, `Equation`, `Quantity`, `Assumption`, `CoordinateFrame`, `Robot`, `Task`, `Dataset`, `Metric`, `Tool` and others
-  - Relation types: wired by `HAS_VARIABLE`, `HAS_FACTOR`, `CONNECTS`, `ESTIMATES`, `MEASURES`, `ASSUMES`, `SOLVED_BY`, `DEFINED_BY`, `EVALUATED_ON`, `EXPRESSED_IN`, `HAS_NOISE` and others
+- **Layer 3: Deep Domain Knowledge** (e.g., sensor fusion, factor graphs, robotics navigation)
+  - Node types: `FactorGraph`, `Variable`, `Factor`, `StateEstimator`, `MotionModel`, `SensorModel`, `NoiseModel`, `Sensor`, `Solver`, `Equation`, `Quantity`, `Assumption`, `CoordinateFrame`, `Robot`, `Task`, `Dataset`, `Metric`, `Tool`
+  - Relation types: `HAS_VARIABLE`, `HAS_FACTOR`, `CONNECTS`, `ESTIMATES`, `MEASURES`, `ASSUMES`, `SOLVED_BY`, `DEFINED_BY`, `EXPRESSED_BY`, `USES_SYMBOL`, `EVALUATED_ON`, `EXPRESSED_IN`, `HAS_NOISE`
 
 Key point: a mere document summary is a failed extraction — the goal is the structured knowledge held
 *inside* documents.
@@ -303,8 +313,9 @@ Run all codebase quality gating checks (linter and unit/e2e tests) with:
 
 Individual checks:
 - Linter: `ruff check .`
-- Test suite: `pytest -W error` (126 tests)
+- Test suite: `pytest -W error` (130 tests)
 - Static code check on a knowledge base: `kb code check --all --kb <path>`
+- Graph quality audit: `kb graph lint --kb <path>`
 
 Optional extras:
 
