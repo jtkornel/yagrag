@@ -16,14 +16,14 @@ from .upsert import (
 )
 
 __all__ = [
+    "GrafeoNotInstalled",
     "GraphDB",
     "GraphEngineNotInstalled",
-    "GrafeoNotInstalled",
-    "open_graph",
-    "upsert_node",
-    "upsert_edge",
-    "upsert_claim",
-    "execute_batch",
     "GraphWriteError",
     "ProvenanceError",
+    "execute_batch",
+    "open_graph",
+    "upsert_claim",
+    "upsert_edge",
+    "upsert_node",
 ]

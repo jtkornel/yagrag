@@ -17,7 +17,6 @@ import pytest
 from typer.testing import CliRunner
 
 from kb.cli.main import app
-from kb.code import checker as checker_mod
 from kb.code import (
     STATUS_FAILED,
     STATUS_OK,
@@ -25,6 +24,7 @@ from kb.code import (
     CodeError,
     list_code_nodes,
 )
+from kb.code import checker as checker_mod
 from kb.config import KBConfig
 from kb.graph.connection import open_graph
 
@@ -439,9 +439,8 @@ def test_show_rejects_a_bad_reference(kb_root: Path) -> None:
 
 def test_list_code_nodes_rejects_a_non_code_label(kb_root: Path) -> None:
     config = KBConfig.load(kb_root)
-    with open_graph(kb_root / config.paths.graph_db) as g:
-        with pytest.raises(CodeError):
-            list_code_nodes(g, labels=["Concept"])
+    with open_graph(kb_root / config.paths.graph_db) as g, pytest.raises(CodeError):
+        list_code_nodes(g, labels=["Concept"])
 
 
 def test_absolute_code_path_is_rejected(kb_root: Path) -> None:

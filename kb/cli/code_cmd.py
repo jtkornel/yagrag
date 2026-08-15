@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -18,7 +17,6 @@ from .. import code as kb_code
 from ..code import checker as code_checker
 from ..config import KBConfig
 from ..graph.connection import GrafeoNotInstalled, GraphDB
-
 
 code_app = typer.Typer(
     name="code",
@@ -74,16 +72,16 @@ def _format_status(status: str) -> str:
 
 @code_app.command("list")
 def cmd_list(
-    status: Optional[str] = typer.Option(
+    status: str | None = typer.Option(
         None,
         "--status",
         help="Filter by status (ok | failed | unchecked).",
-    ),  # noqa: UP007
-    label: Optional[str] = typer.Option(
+    ),
+    label: str | None = typer.Option(
         None,
         "--label",
         help="Filter by node label (must be statically checkable in this schema).",
-    ),  # noqa: UP007
+    ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
@@ -227,16 +225,16 @@ def cmd_show(
 
 @code_app.command("check")
 def cmd_check(
-    label: Optional[str] = typer.Option(
+    label: str | None = typer.Option(
         None,
         "--label",
         help="Filter by node label (must be statically checkable in this schema).",
-    ),  # noqa: UP007
-    node_id: Optional[str] = typer.Option(
+    ),
+    node_id: str | None = typer.Option(
         None,
         "--id",
         help="Filter by node id.",
-    ),  # noqa: UP007
+    ),
     all: bool = typer.Option(
         False,
         "--all",

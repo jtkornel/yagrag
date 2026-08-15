@@ -38,7 +38,7 @@ If the type you want to attach code to is not statically checkable, that is a **
         *   **Document-specific snippets**: `code/equations/<doc_id>/<slug>.sympy`, `code/algorithms/<doc_id>/<slug>.py` (or `code/equations/<doc_id>_<slug>.sympy`), isolating document-specific or special-purpose snippets on disk to prevent name collisions across paper ingestions.
 3.  **Set the Entry Point**: Decide on the `code_entry`. This is the function name for Python snippets or the name of the primary relation for SymPy snippets.
 4.  **Upsert the Node**: Run `kb graph upsert-node <Label> --props '...'` including the code properties: `code_language`, `code_path` (relative to KB root), and `code_entry`.
-5.  **Check the Code**: Run `kb code check --label <Label> --id <ID>` (add `--lint` for Python) to perform static analysis.
+5.  **Check the Code & Lint**: Run `kb code check --label <Label> --id <ID>` (add `--lint` for Python) to perform static analysis. After writing or modifying Python files, always run `ruff check .` (or `./scripts/check.sh`) to verify linter compliance.
 6.  **Verify Status**: Run `kb code list --json` or `kb code show <Label>:<ID>` to read the `code_status` and any warnings or errors recorded.
 
 ## Rules
@@ -55,6 +55,7 @@ If the type you want to attach code to is not statically checkable, that is a **
 *   **Namespacing & Disk Collision**: Use document/source namespacing for document-specific or special-purpose snippets (e.g., `code/equations/raw-0001/motion_model.sympy`). Reserve top-level files under `code/equations/` and `code/algorithms/` for canonical, cross-document domain expressions.
 *   **No Paper Element References in Snippets (Comments or Docstrings)**: Snippet comments and docstrings must focus strictly on technical, mathematical, and algorithmic meaning (symbol definitions, physical assumptions, logic). Do NOT include paper-specific element references (e.g., `# equation (7)`, `# Eq. 1a`, `Based on Table 4 in the paper`, or `Figure 2`) in snippet comments or docstrings. Preserve paper element references as annotations on graph node properties or `summary` (e.g., `summary: "[Table 4] Rule-based classifier..."` or `summary: "[Eq. 7] ..."`), and represent inter-entity relationships at the graph level using edges (`DERIVED_FROM`, `DEFINES`, `RELATES_TO`).
 *   **No Python Imports in SymPy Snippets**: `.sympy` snippet files are parsed line-by-line as raw SymPy expressions (e.g., `Eq(y, x + 1)`). Do NOT include Python import statements (such as `from sympy import ...` or `import sympy`) in `.sympy` files.
+*   **Linter & Quality Gating**: After writing or modifying Python snippets or library code, always run `ruff check .` or `./scripts/check.sh` to ensure clean syntax, properly sorted imports, and no unused references.
 *   **Failed Checks are Data**: A `failed` status does not block a write. Record the failure, and either fix the snippet or proceed if the extraction is still valuable.
 *   **Refresh on Edit**: If you manually edit a file in the `code/` directory, you must re-run `kb code check` to update the `code_hash` and status, otherwise it will be flagged as `stale`.
 *   **No Execution**: The checker only performs static analysis (parsing and symbol resolution). Do not rely on the code being executed.

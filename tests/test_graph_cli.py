@@ -207,8 +207,8 @@ def test_upsert_claim_with_literal_object(kb_dir: Path) -> None:
         runner.invoke(
             app,
             ["graph", "query",
-             "MATCH (cl:Claim)-[:ABOUT]->(c:Concept) "
-             "RETURN cl.predicate AS p, cl.object_literal AS o, c.id AS c",
+             ("MATCH (cl:Claim)-[:ABOUT]->(c:Concept) "
+              "RETURN cl.predicate AS p, cl.object_literal AS o, c.id AS c"),
              "--kb", str(kb_dir), "--json"],
         ).output
     )["rows"]
@@ -231,8 +231,8 @@ def test_upsert_claim_with_entity_object(kb_dir: Path) -> None:
         runner.invoke(
             app,
             ["graph", "query",
-             "MATCH (a:Concept)<-[:ABOUT]-(cl:Claim)-[:HAS_OBJECT]->(b:Concept) "
-             "RETURN a.id AS a, cl.id AS cl, b.id AS b",
+             ("MATCH (a:Concept)<-[:ABOUT]-(cl:Claim)-[:HAS_OBJECT]->(b:Concept) "
+              "RETURN a.id AS a, cl.id AS cl, b.id AS b"),
              "--kb", str(kb_dir), "--json"],
         ).output
     )["rows"]

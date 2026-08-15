@@ -13,7 +13,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 CONFIG_FILENAME = "kb.toml"
 
 
@@ -52,11 +51,11 @@ class KBConfig(BaseModel):
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
 
     @classmethod
-    def default(cls, name: str = "kb") -> "KBConfig":
+    def default(cls, name: str = "kb") -> KBConfig:
         return cls(name=name)
 
     @classmethod
-    def load(cls, kb_root: Path) -> "KBConfig":
+    def load(cls, kb_root: Path) -> KBConfig:
         """Load `<kb_root>/kb.toml` into a `KBConfig`."""
         config_path = kb_root / CONFIG_FILENAME
         if not config_path.is_file():

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -149,10 +149,10 @@ def cmd_upsert_claim(
     claim_id: str = typer.Argument(..., help="Claim id."),
     subject: str = typer.Option(..., "--subject", help="Subject as Label:id."),
     predicate: str = typer.Option(..., "--predicate", help="Claim predicate."),
-    object_ref: Optional[str] = typer.Option(  # noqa: UP007
+    object_ref: str | None = typer.Option(
         None, "--object", help="Object entity as Label:id."
     ),
-    object_literal: Optional[str] = typer.Option(  # noqa: UP007
+    object_literal: str | None = typer.Option(
         None, "--object-literal", help="Literal object value."
     ),
     props: str = typer.Option(
@@ -262,7 +262,7 @@ def cmd_export(
                         rel_dict[k_clean] = v
                 cleaned_rels.append(rel_dict)
             rels[table] = [_jsonable(r) for r in cleaned_rels]
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         _fail(str(exc), json_output)
         return
     finally:
@@ -273,7 +273,7 @@ def cmd_export(
 
 @graph_app.command("batch")
 def cmd_batch(
-    batch_file: Optional[Path] = typer.Option(  # noqa: UP007
+    batch_file: Path | None = typer.Option(
         None,
         "--file",
         "-f",
@@ -552,7 +552,7 @@ def cmd_lint(
 
 @graph_app.command("dedupe")
 def cmd_dedupe(
-    label: Optional[str] = typer.Option(
+    label: str | None = typer.Option(
         None, "--label", "-l", help="Node table to deduplicate (default: all domain node tables)."
     ),
     threshold: float = typer.Option(
@@ -566,6 +566,7 @@ def cmd_dedupe(
 ) -> None:
     """Detect and merge duplicate domain entities across node tables."""
     import re
+
     from ..graph.upsert import upsert_edge
 
     g = _open_db(kb, json_output)
@@ -624,9 +625,12 @@ def cmd_dedupe(
                         continue
 
                     # For symbol-bearing nodes, distinct symbols must never be merged
-                    if n1.get("symbol") and n2.get("symbol"):
-                        if n1["symbol"].strip() != n2["symbol"].strip():
-                            continue
+                    if (
+                        n1.get("symbol")
+                        and n2.get("symbol")
+                        and n1["symbol"].strip() != n2["symbol"].strip()
+                    ):
+                        continue
 
                     is_match = False
                     if (
@@ -661,15 +665,15 @@ def cmd_dedupe(
                     visited.add(nid1)
                     cluster = [n1, *duplicates]
 
-                    def get_degree(item: dict[str, Any]) -> int:
+                    def get_degree(item: dict[str, Any], target_label: str = nt) -> int:
                         cnt = 0
                         for rt in rel_tables:
                             res1 = g.execute(
-                                f"MATCH (n:{nt} {{id: $id}})-[r:{rt}]->() RETURN count(r) AS c",
+                                f"MATCH (n:{target_label} {{id: $id}})-[r:{rt}]->() RETURN count(r) AS c",
                                 {"id": item["id"]},
                             )
                             res2 = g.execute(
-                                f"MATCH ()-[r:{rt}]->(n:{nt} {{id: $id}}) RETURN count(r) AS c",
+                                f"MATCH ()-[r:{rt}]->(n:{target_label} {{id: $id}}) RETURN count(r) AS c",
                                 {"id": item["id"]},
                             )
                             cnt += res1[0]["c"] + res2[0]["c"]

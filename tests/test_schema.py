@@ -15,17 +15,6 @@ from typer.testing import CliRunner
 
 from kb.cli.main import app
 from kb.graph.connection import GraphDB
-from kb.schema.model import (
-    Migration,
-    NodeType,
-    Property,
-    RelationType,
-    RelPair,
-    render_create_edge_type_grafeo,
-    render_create_node_type_grafeo,
-    render_gql_graph_type,
-    Schema,
-)
 from kb.schema.migrations import (
     MigrationError,
     apply_migrations,
@@ -33,6 +22,17 @@ from kb.schema.migrations import (
     load_migrations,
     next_migration_id,
     validate,
+)
+from kb.schema.model import (
+    Migration,
+    NodeType,
+    Property,
+    RelationType,
+    RelPair,
+    Schema,
+    render_create_edge_type_grafeo,
+    render_create_node_type_grafeo,
+    render_gql_graph_type,
 )
 
 runner = CliRunner()

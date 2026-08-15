@@ -21,11 +21,11 @@ from .graph import (
 
 __version__ = "0.1.0"
 __all__ = [
-    "KBConfig",
+    "GrafeoNotInstalled",
     "GraphDB",
     "GraphEngineNotInstalled",
-    "GrafeoNotInstalled",
     "GraphWriteError",
+    "KBConfig",
     "ProvenanceError",
     "execute_batch",
     "open_graph",

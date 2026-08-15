@@ -12,7 +12,6 @@ from kb.cli.main import app
 from kb.config import CONFIG_FILENAME, KBConfig
 from kb.init import init_kb
 
-
 # --- Library-level tests --------------------------------------------------
 
 

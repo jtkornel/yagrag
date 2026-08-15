@@ -39,18 +39,19 @@ Three hard rules shape this module:
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
 import re
 import shutil
 import subprocess
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from ..config import KBConfig
 from ..graph.connection import GraphDB
-
 
 # The contract a schema must satisfy for a node type to be statically
 # checkable: it declares *all* of these properties. No node label is hardcoded
@@ -153,7 +154,7 @@ class CheckResult:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    return datetime.now(UTC).replace(microsecond=0).isoformat()
 
 
 def content_hash(text: str) -> str:
@@ -319,13 +320,7 @@ def known_symbols(g: GraphDB) -> set[str]:
 # SymPy names a stored expression may reference. Deliberately curated: parsing
 # happens against this namespace only, so an expression cannot reach arbitrary
 # attributes even though `sympify` is `eval`-adjacent.
-_SYMPY_ALLOWED = (
-    "Eq Ne Symbol symbols Function Matrix Sum Product Integral Derivative diff "
-    "integrate simplify expand sqrt exp log sin cos tan asin acos atan atan2 "
-    "sinh cosh tanh Abs sign Min Max floor ceiling Piecewise Rational Integer "
-    "Float pi E I oo Transpose Inverse Determinant trace zeros eye ones "
-    "KroneckerDelta factorial binomial Pow Add Mul"
-).split()
+_SYMPY_ALLOWED = ["Eq", "Ne", "Symbol", "symbols", "Function", "Matrix", "Sum", "Product", "Integral", "Derivative", "diff", "integrate", "simplify", "expand", "sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "Abs", "sign", "Min", "Max", "floor", "ceiling", "Piecewise", "Rational", "Integer", "Float", "pi", "E", "I", "oo", "Transpose", "Inverse", "Determinant", "trace", "zeros", "eye", "ones", "KroneckerDelta", "factorial", "binomial", "Pow", "Add", "Mul"]
 
 
 def _sympy_namespace() -> dict[str, Any]:
@@ -379,8 +374,10 @@ def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
         from sympy.parsing.sympy_parser import parse_expr
     except ImportError:
         return [], [
-            "sympy is not installed; expression not parsed "
-            "(install with `pip install .[math]`)"
+            (
+                "sympy is not installed; expression not parsed "
+                "(install with `pip install .[math]`)"
+            )
         ]
 
     expressions = _expression_lines(source)
@@ -398,7 +395,7 @@ def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
                 global_dict=namespace,
                 evaluate=False,
             )
-        except Exception as exc:  # sympy raises a wide range of exceptions
+        except Exception as exc:  # noqa: BLE001  # sympy raises a wide range of exceptions
             errors.append(f"sympy parse error in {line!r}: {exc}")
             continue
         free.update(str(s) for s in getattr(expr, "free_symbols", set()))
@@ -437,6 +434,7 @@ def _run_ruff(path: Path) -> tuple[list[str], bool]:
             capture_output=True,
             text=True,
             timeout=60,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return [f"ruff could not be run: {exc}"], False
@@ -462,12 +460,14 @@ def _check_comment_doc_refs(source: str, language: str = LANGUAGE_PYTHON) -> lis
             match = _DOC_REF_RE.search(comment_part)
             if match:
                 return [
-                    f"snippet comment contains paper-specific reference ('{match.group(0)}'); "
-                    "paper equation/table/figure references belong on graph node property/summary, "
-                    "not in code snippet comments or docstrings"
+                    (
+                        f"snippet comment contains paper-specific reference ('{match.group(0)}'); "
+                        "paper equation/table/figure references belong on graph node property/summary, "
+                        "not in code snippet comments or docstrings"
+                    )
                 ]
     if language == LANGUAGE_PYTHON:
-        try:
+        with contextlib.suppress(SyntaxError):
             tree = ast.parse(source)
             for node in ast.walk(tree):
                 if isinstance(
@@ -478,12 +478,12 @@ def _check_comment_doc_refs(source: str, language: str = LANGUAGE_PYTHON) -> lis
                         match = _DOC_REF_RE.search(doc)
                         if match:
                             return [
-                                f"snippet docstring contains paper-specific reference ('{match.group(0)}'); "
-                                "paper equation/table/figure references belong on graph node property/summary, "
-                                "not in code snippet comments or docstrings"
+                                (
+                                    f"snippet docstring contains paper-specific reference ('{match.group(0)}'); "
+                                    "paper equation/table/figure references belong on graph node property/summary, "
+                                    "not in code snippet comments or docstrings"
+                                )
                             ]
-        except SyntaxError:
-            pass
     return []
 
 
@@ -581,8 +581,10 @@ def check_node(
             checked_at=_now(),
             code_hash=code_hash,
             warnings=[
-                "unknown code_language "
-                f"{node.language!r} (expected {LANGUAGE_PYTHON!r} or {LANGUAGE_SYMPY!r})"
+                (
+                    "unknown code_language "
+                    f"{node.language!r} (expected {LANGUAGE_PYTHON!r} or {LANGUAGE_SYMPY!r})"
+                )
             ],
         )
 

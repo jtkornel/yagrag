@@ -291,11 +291,18 @@ Supported migration operations:
 
 Machine-readable output: use `--json`. All KB-aware subcommands (everything except `kb init`) accept `--kb <path>` (default: `.`).
 
-### Development
+### Development & Quality Checks
 
-Run tests with:
+Run all codebase quality gating checks (linter and unit/e2e tests) with:
 
-`.venv/bin/python -m pytest -q` (103 tests).
+```bash
+./scripts/check.sh
+```
+
+Individual checks:
+- Linter: `ruff check .`
+- Test suite: `pytest -W error` (115 tests)
+- Static code check on a knowledge base: `kb code check --all --kb <path>`
 
 Optional extras:
 

@@ -6,9 +6,10 @@ synthesized separation and mandatory provenance for synthesized documents.
 
 from __future__ import annotations
 
+import contextlib
 import json as _json
 from pathlib import Path
-from typing import Any, List, Optional, cast
+from typing import Any, cast
 
 import typer
 from rich.console import Console
@@ -101,11 +102,11 @@ def _open_store(kb: Path, json_output: bool) -> DocumentStore:
 def cmd_add(
     file: Path = typer.Argument(..., help="File to ingest (md/txt/pdf)."),
     kind: str = typer.Option(..., "--kind", help="raw | synthesized"),
-    title: Optional[str] = typer.Option(None, "--title"),  # noqa: UP007
-    source: List[str] = typer.Option(  # noqa: UP006
+    title: str | None = typer.Option(None, "--title"),
+    source: list[str] = typer.Option(
         [], "--source", help="Source document id (repeatable; synthesized only)."
     ),
-    tag: List[str] = typer.Option([], "--tag", help="Tag (repeatable)."),  # noqa: UP006
+    tag: list[str] = typer.Option([], "--tag", help="Tag (repeatable)."),
     notes: str = typer.Option("", "--notes"),
     url: str = typer.Option("", "--url", help="Origin URL of the document."),
     kb: Path = _KB_OPT,
@@ -134,8 +135,9 @@ def cmd_add(
     db_path = kb / cfg.paths.graph_db
     reconciled_stub_info = None
     if db_path.exists():
-        try:
+        with contextlib.suppress(Exception):
             import re
+
             from ..graph.connection import open_graph
             from ..graph.upsert import upsert_edge, upsert_node
 
@@ -195,8 +197,6 @@ def cmd_add(
                                 "stub_id": sid,
                                 "redirected_citations": len(citing_rows),
                             }
-        except Exception:
-            pass  # Do not block store creation if graph DB is uninitialized or fails
 
     out_data = rec.to_dict()
     if reconciled_stub_info:
@@ -213,7 +213,7 @@ def cmd_add(
 
 @doc_app.command("list")
 def cmd_list(
-    kind: Optional[str] = typer.Option(None, "--kind", help="Filter: raw | synthesized."),  # noqa: UP007
+    kind: str | None = typer.Option(None, "--kind", help="Filter: raw | synthesized."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
@@ -278,10 +278,10 @@ def cmd_text(
 def cmd_cite(
     citing_id: str = typer.Argument(..., help="Citing document id (e.g. raw-0001)."),
     title: str = typer.Option(..., "--title", "-t", help="Title of cited paper."),
-    year: Optional[int] = typer.Option(None, "--year", "-y", help="Publication year of cited paper."),
-    url: Optional[str] = typer.Option(None, "--url", "-u", help="URL, DOI, or arXiv link."),
-    ref: Optional[str] = typer.Option(None, "--ref", "-r", help="Full citation string from bibliography."),
-    to_doc: Optional[str] = typer.Option(None, "--to-doc", help="Explicit existing target document id."),
+    year: int | None = typer.Option(None, "--year", "-y", help="Publication year of cited paper."),
+    url: str | None = typer.Option(None, "--url", "-u", help="URL, DOI, or arXiv link."),
+    ref: str | None = typer.Option(None, "--ref", "-r", help="Full citation string from bibliography."),
+    to_doc: str | None = typer.Option(None, "--to-doc", help="Explicit existing target document id."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
@@ -292,6 +292,7 @@ def cmd_cite(
         _fail("Graph database not found; run migrations first", json_output)
 
     import re
+
     from ..graph.connection import open_graph
     from ..graph.upsert import upsert_edge, upsert_node
 
@@ -471,11 +472,9 @@ def cmd_stubs(
                 {"id": sid},
             )
             citing_ids = sorted(
-                list(
-                    set(
-                        [c["citing_id"] for c in citing_rows]
-                        + (r.get("sources") or [])
-                    )
+                set(
+                    [c["citing_id"] for c in citing_rows]
+                    + (r.get("sources") or [])
                 )
             )
             cites_count = len(citing_ids)
@@ -556,7 +555,7 @@ def cmd_match_stubs(
                         "year": r.get("year"),
                         "url": r.get("url") or "",
                         "score": round(score, 2),
-                        "matched_tokens": sorted(list(common)),
+                        "matched_tokens": sorted(common),
                     }
                 )
 
@@ -649,6 +648,7 @@ def cmd_clean(
         _fail("Graph database not found", json_output)
 
     import re
+
     from ..graph.connection import open_graph
     from ..graph.upsert import upsert_edge
 

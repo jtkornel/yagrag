@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -22,6 +21,8 @@ from ..schema.migrations import (
     build_target_schema,
     create_migration_file,
     load_migrations,
+)
+from ..schema.migrations import (
     validate as validate_schema,
 )
 
@@ -73,7 +74,7 @@ _JSON_OPT = typer.Option(False, "--json", help="Emit JSON output.")
 
 @schema_app.command("show")
 def cmd_show(
-    type_name: Optional[str] = typer.Option(  # noqa: UP007
+    type_name: str | None = typer.Option(
         None, "--type", "-t", help="Filter by node or relation type name (case-insensitive)."
     ),
     kb: Path = _KB_OPT,

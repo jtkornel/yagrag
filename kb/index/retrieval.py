@@ -15,6 +15,7 @@ An empty/unbuilt index yields an empty-but-valid bundle (no crash).
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any, cast
 
@@ -53,7 +54,7 @@ def _extract_node_props(node: Any) -> dict[str, Any]:
 
 def _vector_hits(g: GraphDB, vector: list[float], limit: int) -> list[dict[str, Any]]:
     if g._db is not None:
-        try:
+        with contextlib.suppress(Exception):
             results = g._db.vector_search(CHUNK_TABLE, "embedding", vector, k=limit)
             hits = []
             for node_id, dist in results:
@@ -69,9 +70,7 @@ def _vector_hits(g: GraphDB, vector: list[float], limit: int) -> list[dict[str, 
                 })
             if hits:
                 return hits
-        except Exception:  # noqa: BLE001
-            pass
-        try:
+        with contextlib.suppress(Exception):
             rows = g.execute(
                 f"MATCH (node:{CHUNK_TABLE}) "
                 "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
@@ -90,14 +89,12 @@ def _vector_hits(g: GraphDB, vector: list[float], limit: int) -> list[dict[str, 
                 }
                 for r in rows
             ]
-        except Exception:  # noqa: BLE001
-            return []
     return []
 
 
 def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
     if g._db is not None:
-        try:
+        with contextlib.suppress(Exception):
             results = g._db.text_search(CHUNK_TABLE, "text", query, k=limit)
             hits = []
             for node_id, score in results:
@@ -113,9 +110,7 @@ def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
                 })
             if hits:
                 return hits
-        except Exception:  # noqa: BLE001
-            pass
-        try:
+        with contextlib.suppress(Exception):
             rows = g.execute(
                 f"MATCH (node:{CHUNK_TABLE}) "
                 "WHERE node.text CONTAINS $q "
@@ -135,8 +130,6 @@ def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
                 }
                 for r in rows
             ]
-        except Exception:  # noqa: BLE001
-            return []
     return []
 
 

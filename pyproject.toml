@@ -37,3 +37,17 @@ addopts = "-ra"
 filterwarnings = [
     "ignore:.*utcfromtimestamp.*:DeprecationWarning",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [
+    "kb-data",
+    ".venv",
+    "papers",
+]
+
+[tool.ruff.lint]
+ignore = [
+    "B008",  # Typer argument / option defaults
+]

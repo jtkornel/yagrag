@@ -34,6 +34,7 @@ def _kb(kb_dir: Path, *args: str) -> str:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     return result.stdout
@@ -60,6 +61,7 @@ def example_kb(tmp_path_factory: pytest.TempPathFactory) -> Path:
         env=env,
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return kb_dir
@@ -224,6 +226,7 @@ def test_snippet_source_is_printable_verbatim(example_kb: Path) -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0, result.stderr
     assert "def integrate(v: float, omega: float, alpha: float, dt: float)" in result.stdout

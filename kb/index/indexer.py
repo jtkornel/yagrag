@@ -12,6 +12,7 @@ summary, so hybrid search can surface graph entities as well as documents.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,24 +76,17 @@ class IndexStats:
 
 def _load_extensions(g: GraphDB) -> None:
     """Grafeo provides native vector and full-text search without dynamic extension loading."""
-    pass
 
 
 def _drop_existing(g: GraphDB) -> None:
-    try:
+    with contextlib.suppress(Exception):
         g.execute(f"MATCH (c:{CHUNK_TABLE}) DETACH DELETE c")
-    except Exception:  # noqa: BLE001
-        pass
     if hasattr(g._db, "drop_vector_index"):
-        try:
+        with contextlib.suppress(Exception):
             g._db.drop_vector_index(CHUNK_TABLE, "embedding")
-        except Exception:  # noqa: BLE001
-            pass
     if hasattr(g._db, "drop_text_index"):
-        try:
+        with contextlib.suppress(Exception):
             g._db.drop_text_index(CHUNK_TABLE, "text")
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def _entity_rows(g: GraphDB) -> list[dict[str, Any]]:
@@ -102,16 +96,14 @@ def _entity_rows(g: GraphDB) -> list[dict[str, Any]]:
         table = str(table_raw)
         if not table or table in _NON_ENTITY_TABLES or table.startswith("_"):
             continue
-        try:
+        with contextlib.suppress(Exception):
             result = g.execute(
                 f"MATCH (n:{table}) RETURN n.id AS id, n.name AS name, "
                 "coalesce(n.summary, '') AS summary"
             )
-        except (RuntimeError, Exception):  # noqa: BLE001
-            continue  # table without id/name properties — skip
-        for r in result:
-            if r.get("id") and r.get("name"):
-                rows.append({"table": table, **r})
+            for r in result:
+                if r.get("id") and r.get("name"):
+                    rows.append({"table": table, **r})
     return rows
 
 
@@ -162,12 +154,10 @@ def build_index(kb_root: Path, config: KBConfig | None = None) -> IndexStats:
 
         if chunks:
             vectors = embedder.embed([c["text"] for c in chunks])
-            try:
+            with contextlib.suppress(Exception):
                 g._db.create_vector_index(
                     CHUNK_TABLE, "embedding", dimensions=embedder.dim, metric="cosine"
                 )
-            except Exception:  # noqa: BLE001
-                pass
             chunk_items = []
             for chunk, vec in zip(chunks, vectors, strict=False):
                 chunk_items.append({
@@ -177,13 +167,11 @@ def build_index(kb_root: Path, config: KBConfig | None = None) -> IndexStats:
                 })
             try:
                 g._db.batch_create_nodes_with_props(CHUNK_TABLE, chunk_items)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 for item in chunk_items:
                     g._db.create_node([CHUNK_TABLE], item)
-            try:
+            with contextlib.suppress(Exception):
                 g._db.create_text_index(CHUNK_TABLE, "text")
-            except Exception:  # noqa: BLE001
-                pass
 
     return IndexStats(
         documents=len(records),

@@ -13,6 +13,7 @@ so `apply` is idempotent: re-running only executes pending files.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from dataclasses import dataclass
@@ -64,7 +65,7 @@ def _clean_statement(stmt: str) -> str:
     lines = []
     for line in stmt.splitlines():
         line_s = line.strip()
-        if line_s.startswith("--") or line_s.startswith("//"):
+        if line_s.startswith(("--", "//")):
             continue
         lines.append(line)
     return "\n".join(lines).strip()
@@ -136,12 +137,10 @@ def load_migrations(migrations_dir: Path) -> list[MigrationFile]:
 
 def _ensure_migrations_table(g: GraphDB) -> None:
     if MIGRATIONS_TABLE not in g.node_table_names():
-        try:
+        with contextlib.suppress(Exception):
             g.execute(
                 f"CREATE NODE TYPE {MIGRATIONS_TABLE} (id STRING, applied_at TIMESTAMP)"
             )
-        except Exception:  # noqa: BLE001
-            pass
 
 
 def applied_migration_ids(g: GraphDB) -> list[str]:
@@ -159,15 +158,11 @@ def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
     if mf.migration is not None:
         for op in mf.migration.operations:
             if isinstance(op, CreateNodeOp):
-                try:
+                with contextlib.suppress(Exception):
                     g.execute(render_create_node_type_grafeo(op.table))
-                except Exception:  # noqa: BLE001
-                    pass
             elif isinstance(op, CreateRelOp):
-                try:
+                with contextlib.suppress(Exception):
                     g.execute(render_create_edge_type_grafeo(op.table))
-                except Exception:  # noqa: BLE001
-                    pass
             elif isinstance(op, AddRelPairOp):
                 pass
             elif isinstance(op, CypherOp):
@@ -176,10 +171,8 @@ def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
     else:
         assert mf.raw_cypher is not None
         for stmt in _split_cypher_statements(mf.raw_cypher):
-            try:
+            with contextlib.suppress(Exception):
                 g.execute(stmt)
-            except Exception:  # noqa: BLE001
-                pass
 
 
 def apply_migrations(g: GraphDB, migrations_dir: Path) -> list[str]:
@@ -228,30 +221,22 @@ def build_target_schema(migrations_dir: Path) -> Schema:
     for mf in load_migrations(migrations_dir):
         if mf.raw_cypher is not None:
             for stmt in _split_cypher_statements(mf.raw_cypher):
-                try:
+                with contextlib.suppress(Exception):
                     db.execute(stmt)
-                except Exception:  # noqa: BLE001
-                    pass
         elif mf.migration is not None:
             for op in mf.migration.operations:
                 if isinstance(op, CreateNodeOp):
-                    try:
+                    with contextlib.suppress(Exception):
                         db.execute(render_create_node_type_grafeo(op.table))
-                    except Exception:  # noqa: BLE001
-                        pass
                 elif isinstance(op, CreateRelOp):
-                    try:
+                    with contextlib.suppress(Exception):
                         db.execute(render_create_edge_type_grafeo(op.table))
-                    except Exception:  # noqa: BLE001
-                        pass
                 elif isinstance(op, AddRelPairOp):
                     pass
                 elif isinstance(op, CypherOp):
                     for stmt in _split_cypher_statements(op.sql):
-                        try:
+                        with contextlib.suppress(Exception):
                             db.execute(stmt)
-                        except Exception:  # noqa: BLE001
-                            pass
 
     node_types: list[NodeType] = []
     for r in db.execute("SHOW NODE TYPES"):

@@ -16,10 +16,9 @@ just a `NodeType` with subject/predicate/object semantic properties plus
 
 from __future__ import annotations
 
-from typing import Annotated, Literal, Union
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
 
 # --- Property types ----------------------------------------------------------
 
@@ -50,9 +49,7 @@ def _is_valid_type(t: str) -> bool:
         return True
     if t.startswith("LIST<") and t.endswith(">"):
         return _is_valid_type(t[5:-1])
-    if t.endswith("[]") and _is_valid_type(t[:-2]):
-        return True
-    return False
+    return bool(t.endswith("[]") and _is_valid_type(t[:-2]))
 
 
 # --- Property / NodeType / RelationType --------------------------------------
@@ -338,7 +335,7 @@ class CypherOp(BaseModel):
 
 
 MigrationOp = Annotated[
-    Union[CreateNodeOp, CreateRelOp, AddRelPairOp, CypherOp],
+    CreateNodeOp | CreateRelOp | AddRelPairOp | CypherOp,
     Field(discriminator="op"),
 ]
 

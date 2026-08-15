@@ -8,10 +8,10 @@ __all__ = [
     "Embedder",
     "EmbedderError",
     "HashEmbedder",
-    "LocalEmbedder",
-    "get_embedder",
     "IndexStats",
+    "LocalEmbedder",
     "build_index",
     "chunk_text",
+    "get_embedder",
     "search",
 ]

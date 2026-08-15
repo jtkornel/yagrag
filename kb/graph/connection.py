@@ -7,11 +7,12 @@ to introspect labels, edges, and schema.
 
 from __future__ import annotations
 
+import contextlib
 import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 
 from ..config import KBConfig
 
@@ -92,7 +93,7 @@ class GraphDB:
                 self._db.close()
             self._db = None
 
-    def __enter__(self) -> GraphDB:
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -151,26 +152,22 @@ class GraphDB:
         if self._db is None:
             return []
         all_lbls: set[str] = set()
-        try:
+        with contextlib.suppress(Exception):
             for r in self.execute("SHOW NODE TYPES"):
                 name = _extract_name(r.get("name") or r.get("label") or r)
                 if name:
                     all_lbls.add(name)
-        except Exception:  # noqa: BLE001
-            pass
         return sorted(all_lbls)
 
     def rel_table_names(self) -> list[str]:
         if self._db is None:
             return []
         all_edges: set[str] = set()
-        try:
+        with contextlib.suppress(Exception):
             for r in self.execute("SHOW EDGE TYPES"):
                 name = _extract_name(r.get("name") or r.get("label") or r)
                 if name:
                     all_edges.add(name)
-        except Exception:  # noqa: BLE001
-            pass
         return sorted(all_edges)
 
     def table_info(self, name: str) -> list[dict[str, Any]]:
@@ -178,7 +175,7 @@ class GraphDB:
         if self._db is None:
             return []
         target_name = name.strip().lower()
-        try:
+        with contextlib.suppress(Exception):
             for nt in self.execute("SHOW NODE TYPES"):
                 if str(nt.get("name", "")).strip().lower() == target_name:
                     props_str = nt.get("properties", "")
@@ -192,10 +189,8 @@ class GraphDB:
                                 col_type = pieces[1] if len(pieces) > 1 else "ANY"
                                 cols.append({"name": col_name, "type": col_type})
                     return cols
-        except Exception:  # noqa: BLE001
-            pass
 
-        try:
+        with contextlib.suppress(Exception):
             for et in self.execute("SHOW EDGE TYPES"):
                 if str(et.get("name", "")).strip().lower() == target_name:
                     props_str = et.get("properties", "")
@@ -209,8 +204,6 @@ class GraphDB:
                                 col_type = pieces[1] if len(pieces) > 1 else "ANY"
                                 cols_edge.append({"name": col_name, "type": col_type})
                     return cols_edge
-        except Exception:  # noqa: BLE001
-            pass
 
         return []
 

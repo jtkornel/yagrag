@@ -74,6 +74,15 @@ kb doc stubs --min-cites 2
 ```
 *   Use this list to recommend high-value foundational papers for future acquisition.
 
+### 6. Full Quality Gating (`./scripts/check.sh`)
+Run the unified quality gating check across linter and test suite:
+```bash
+./scripts/check.sh
+```
+*   Runs `ruff check .` across the codebase.
+*   Runs `pytest -W error` unit and end-to-end test suites.
+*   Optionally pass a KB directory (e.g. `./scripts/check.sh <kb-dir>`) to also check domain snippets in that knowledge base.
+
 ## Rules
 
 *   **Dry-Run First**: Always inspect proposed changes with dry-run commands before executing with `--apply`.

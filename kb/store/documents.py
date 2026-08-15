@@ -16,12 +16,11 @@ import hashlib
 import json
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from ..config import KBConfig
-
 
 DocKind = Literal["raw", "synthesized"]
 
@@ -52,7 +51,7 @@ def content_hash(path: Path) -> str:
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 @dataclass(frozen=True)
@@ -87,7 +86,7 @@ class DocumentRecord:
         }
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "DocumentRecord":
+    def from_dict(cls, d: dict[str, Any]) -> DocumentRecord:
         return cls(
             id=d["id"],
             kind=d["kind"],

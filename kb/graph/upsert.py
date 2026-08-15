@@ -13,7 +13,6 @@ from typing import Any
 
 from .connection import GraphDB
 
-
 VALID_ORIGINS = ("raw", "synthesized", "inferred")
 
 

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -21,7 +20,6 @@ from .doc_cmd import doc_app
 from .graph_cmd import graph_app
 from .index_cmd import index_app, search_command
 from .schema_cmd import schema_app
-
 
 app = typer.Typer(
     name="kb",
@@ -48,7 +46,7 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def _root(
-    version: Optional[bool] = typer.Option(  # noqa: UP007 - Typer needs Optional
+    version: bool | None = typer.Option(
         None,
         "--version",
         callback=_version_callback,
@@ -65,7 +63,7 @@ def cmd_init(
         ...,
         help="Directory to scaffold as a knowledge base (created if missing).",
     ),
-    name: Optional[str] = typer.Option(  # noqa: UP007
+    name: str | None = typer.Option(
         None,
         "--name",
         help="Knowledge base display name (defaults to the target directory name).",
