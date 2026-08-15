@@ -35,7 +35,7 @@ if [ -n "${KB_EMBEDDER_BACKEND:-}" ]; then
     sed -i "s/^backend = .*/backend = \"$KB_EMBEDDER_BACKEND\"/" "$TARGET/kb.toml"
 fi
 
-cp "$REPO_ROOT/schema/migrations/0001_seed_domain.json" "$TARGET/schema/migrations/"
+cp "$REPO_ROOT/schema/migrations/0001_seed_domain.gql" "$TARGET/schema/migrations/"
 kb schema apply --kb "$TARGET" >/dev/null
 kb schema validate --kb "$TARGET" >/dev/null
 

@@ -1,0 +1,4 @@
+-- Add missing domain relationship pairs between StateEstimator, Algorithm, Method, Equation, FactorGraph, Solver, MotionModel, SensorModel, Quantity, and Variable.
+-- Documents relation pairs:
+-- USES: StateEstimator->Algorithm, StateEstimator->Method, StateEstimator->FactorGraph, StateEstimator->Solver, Algorithm->MotionModel, Algorithm->SensorModel
+-- DEFINED_BY: Algorithm->Equation, Method->Equation, Variable->Equation, Quantity->MotionModel, Variable->MotionModel

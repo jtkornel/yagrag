@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import json as _json
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, cast
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from ..config import KBConfig
-from ..store.documents import DocumentStore, StoreError
+from ..store.documents import DocKind, DocumentStore, StoreError
 
 doc_app = typer.Typer(
     name="doc",
@@ -118,7 +118,7 @@ def cmd_add(
     try:
         rec = store.add(
             file,
-            kind,  # type: ignore[arg-type]
+            cast(DocKind, kind),
             title=title,
             sources=list(source),
             tags=list(tag),
@@ -140,7 +140,7 @@ def cmd_add(
             from ..graph.upsert import upsert_edge, upsert_node
 
             with open_graph(db_path) as g:
-                props: dict = {
+                props: dict[str, Any] = {
                     "id": rec.id,
                     "name": rec.title,
                     "kind": rec.kind,
@@ -296,7 +296,7 @@ def cmd_cite(
     from ..graph.upsert import upsert_edge, upsert_node
 
     with open_graph(db_path) as g:
-        citing_rows = g.execute("MATCH (d:Document {id: $id}) RETURN d.*", {"id": citing_id})
+        citing_rows = g.execute("MATCH (d:Document {id: $id}) RETURN d.id AS id, d.kind AS kind", {"id": citing_id})
         if not citing_rows:
             _fail(f"Citing document {citing_id!r} not found in graph", json_output)
 
@@ -305,11 +305,11 @@ def cmd_cite(
         action: str
 
         if to_doc:
-            tgt_rows = g.execute("MATCH (d:Document {id: $id}) RETURN d.*", {"id": to_doc})
+            tgt_rows = g.execute("MATCH (d:Document {id: $id}) RETURN d.id AS id, d.kind AS kind", {"id": to_doc})
             if not tgt_rows:
                 _fail(f"Target document {to_doc!r} not found in graph", json_output)
             target_id = to_doc
-            target_kind = tgt_rows[0].get("d.kind") or "raw"
+            target_kind = tgt_rows[0].get("kind") or "raw"
             action = "linked_explicit"
         else:
             found = None
@@ -383,7 +383,7 @@ def cmd_cite(
 
                 target_kind = "stub"
                 action = "created_stub"
-                stub_props = {
+                stub_props: dict[str, Any] = {
                     "id": target_id,
                     "name": title,
                     "kind": "stub",
@@ -593,10 +593,10 @@ def cmd_reconcile_stub(
     from ..graph.upsert import upsert_edge
 
     with open_graph(db_path) as g:
-        stub_rows = g.execute("MATCH (s:Document {id: $id}) RETURN s.*", {"id": stub_id})
+        stub_rows = g.execute("MATCH (s:Document {id: $id}) RETURN s.id AS id", {"id": stub_id})
         if not stub_rows:
             _fail(f"Stub document {stub_id!r} not found in graph", json_output)
-        tgt_rows = g.execute("MATCH (t:Document {id: $id}) RETURN t.*", {"id": to_doc_id})
+        tgt_rows = g.execute("MATCH (t:Document {id: $id}) RETURN t.id AS id", {"id": to_doc_id})
         if not tgt_rows:
             _fail(f"Target document {to_doc_id!r} not found in graph", json_output)
 

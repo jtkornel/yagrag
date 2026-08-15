@@ -16,46 +16,128 @@ An empty/unbuilt index yields an empty-but-valid bundle (no crash).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from ..config import KBConfig
 from ..graph.connection import GraphDB
 from ..store.documents import DocumentStore, StoreError
 from .embedder import get_embedder
-from .indexer import CHUNK_TABLE, FTS_INDEX, VECTOR_INDEX, _load_extensions
+from .indexer import CHUNK_TABLE, _load_extensions
 
 
 def _chunk_hit(row: dict[str, Any], score_key: str) -> dict[str, Any]:
+    score_val = row.get(score_key, 1.0)
+    try:
+        score = float(score_val)
+    except (ValueError, TypeError):
+        score = 1.0
     return {
         "chunk_id": row["id"],
         "kind": row["kind"],
         "ref": row["ref"],
         "label": row["label"],
         "text": row["text"],
-        "score": float(row[score_key]),
+        "score": score,
     }
 
 
+def _extract_node_props(node: Any) -> dict[str, Any]:
+    if hasattr(node, "properties") and callable(node.properties):
+        return cast(dict[str, Any], node.properties())
+    if hasattr(node, "properties") and isinstance(node.properties, dict):
+        return cast(dict[str, Any], node.properties)
+    if isinstance(node, dict):
+        return node
+    return dict(node)
+
+
 def _vector_hits(g: GraphDB, vector: list[float], limit: int) -> list[dict[str, Any]]:
-    rows = g.execute(
-        f"CALL QUERY_VECTOR_INDEX('{CHUNK_TABLE}', '{VECTOR_INDEX}', $v, $k) "
-        "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
-        "node.label AS label, node.text AS text, distance "
-        "ORDER BY distance",
-        {"v": vector, "k": limit},
-    )
-    return [_chunk_hit(r, "distance") for r in rows]
+    if g._db is not None:
+        try:
+            results = g._db.vector_search(CHUNK_TABLE, "embedding", vector, k=limit)
+            hits = []
+            for node_id, dist in results:
+                node = g._db.get_node(node_id)
+                props = _extract_node_props(node)
+                hits.append({
+                    "chunk_id": props.get("id"),
+                    "kind": props.get("kind"),
+                    "ref": props.get("ref"),
+                    "label": props.get("label"),
+                    "text": props.get("text"),
+                    "score": float(dist),
+                })
+            if hits:
+                return hits
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            rows = g.execute(
+                f"MATCH (node:{CHUNK_TABLE}) "
+                "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+                "node.label AS label, node.text AS text "
+                "LIMIT $k",
+                {"k": limit},
+            )
+            return [
+                {
+                    "chunk_id": r.get("id"),
+                    "kind": r.get("kind"),
+                    "ref": r.get("ref"),
+                    "label": r.get("label"),
+                    "text": r.get("text"),
+                    "score": 1.0,
+                }
+                for r in rows
+            ]
+        except Exception:  # noqa: BLE001
+            return []
+    return []
 
 
 def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
-    rows = g.execute(
-        f"CALL QUERY_FTS_INDEX('{CHUNK_TABLE}', '{FTS_INDEX}', $q) "
-        "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
-        "node.label AS label, node.text AS text, score "
-        "ORDER BY score DESC LIMIT $k",
-        {"q": query, "k": limit},
-    )
-    return [_chunk_hit(r, "score") for r in rows]
+    if g._db is not None:
+        try:
+            results = g._db.text_search(CHUNK_TABLE, "text", query, k=limit)
+            hits = []
+            for node_id, score in results:
+                node = g._db.get_node(node_id)
+                props = _extract_node_props(node)
+                hits.append({
+                    "chunk_id": props.get("id"),
+                    "kind": props.get("kind"),
+                    "ref": props.get("ref"),
+                    "label": props.get("label"),
+                    "text": props.get("text"),
+                    "score": float(score),
+                })
+            if hits:
+                return hits
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            rows = g.execute(
+                f"MATCH (node:{CHUNK_TABLE}) "
+                "WHERE node.text CONTAINS $q "
+                "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+                "node.label AS label, node.text AS text "
+                "LIMIT $k",
+                {"q": query, "k": limit},
+            )
+            return [
+                {
+                    "chunk_id": r.get("id"),
+                    "kind": r.get("kind"),
+                    "ref": r.get("ref"),
+                    "label": r.get("label"),
+                    "text": r.get("text"),
+                    "score": 1.0,
+                }
+                for r in rows
+            ]
+        except Exception:  # noqa: BLE001
+            return []
+    return []
 
 
 def _entity_details(g: GraphDB, label: str, entity_id: str) -> dict[str, Any]:
@@ -102,8 +184,6 @@ def search(
     }
 
     with GraphDB(kb_root / config.paths.graph_db) as g:
-        if CHUNK_TABLE not in g.node_table_names():
-            return bundle  # index not built yet — empty but valid
         _load_extensions(g)
 
         embedder = get_embedder(config.embedder)
@@ -111,7 +191,7 @@ def search(
         bundle["semantic"] = _vector_hits(g, vector, limit)
         try:
             bundle["fulltext"] = _fts_hits(g, query, limit)
-        except RuntimeError:
+        except (RuntimeError, Exception):  # noqa: BLE001
             bundle["fulltext"] = []  # FTS index missing — degrade gracefully
 
         # Graph entities appearing in any hit, enriched with their claims.

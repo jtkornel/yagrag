@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 
 from ..config import KBConfig
-from ..graph.connection import GraphDB, KuzuNotInstalled
+from ..graph.connection import GrafeoNotInstalled, GraphDB
 from ..schema.migrations import (
     MigrationError,
     applied_migration_ids,
@@ -58,7 +58,7 @@ def _migrations_dir(kb_root: Path, config: KBConfig) -> Path:
 def _open_db(kb_root: Path, config: KBConfig, json_output: bool) -> GraphDB:
     try:
         return GraphDB(kb_root / config.paths.graph_db)
-    except KuzuNotInstalled as exc:
+    except GrafeoNotInstalled as exc:
         _fail(str(exc), json_output)
         raise AssertionError  # unreachable
 
@@ -78,6 +78,9 @@ def cmd_show(
     ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
+    gql_output: bool = typer.Option(
+        False, "--gql", help="Emit standard ISO GQL (ISO/IEC 39075) schema definition."
+    ),
 ) -> None:
     """Show the target schema declared by all migrations on disk."""
     config = _load_config(kb, json_output)
@@ -89,6 +92,12 @@ def cmd_show(
 
     node_types = schema.node_types
     relation_types = schema.relation_types
+
+    if gql_output:
+        from ..schema.model import render_gql_graph_type
+
+        typer.echo(render_gql_graph_type(schema))
+        return
 
     if type_name:
         target = type_name.strip().lower()

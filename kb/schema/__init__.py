@@ -34,7 +34,10 @@ from .model import (
     RelPair,
     Schema,
     render_create_node_table,
+    render_create_node_type_gql,
     render_create_rel_table,
+    render_create_edge_type_gql,
+    render_gql_graph_type,
 )
 
 __all__ = [
@@ -62,5 +65,8 @@ __all__ = [
     "RelPair",
     "Schema",
     "render_create_node_table",
+    "render_create_node_type_gql",
     "render_create_rel_table",
+    "render_create_edge_type_gql",
+    "render_gql_graph_type",
 ]

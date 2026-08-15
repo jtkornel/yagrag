@@ -16,7 +16,7 @@ from kb.cli.main import app
 from kb.index.embedder import HashEmbedder
 from kb.index.indexer import chunk_text
 
-pytest.importorskip("kuzu")
+pytest.importorskip("grafeo")
 
 runner = CliRunner()
 

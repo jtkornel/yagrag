@@ -7,9 +7,10 @@ It is intentionally LLM-free; all reasoning lives in the agent layer
 
 from .config import KBConfig
 from .graph import (
+    GrafeoNotInstalled,
     GraphDB,
+    GraphEngineNotInstalled,
     GraphWriteError,
-    KuzuNotInstalled,
     ProvenanceError,
     execute_batch,
     open_graph,
@@ -22,8 +23,9 @@ __version__ = "0.1.0"
 __all__ = [
     "KBConfig",
     "GraphDB",
+    "GraphEngineNotInstalled",
+    "GrafeoNotInstalled",
     "GraphWriteError",
-    "KuzuNotInstalled",
     "ProvenanceError",
     "execute_batch",
     "open_graph",

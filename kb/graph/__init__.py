@@ -1,6 +1,11 @@
-"""Kuzu connection wrapper and Cypher execution helpers."""
+"""Embedded graph database connection wrapper (Grafeo) and Cypher execution helpers."""
 
-from .connection import GraphDB, KuzuNotInstalled, open_graph
+from .connection import (
+    GrafeoNotInstalled,
+    GraphDB,
+    GraphEngineNotInstalled,
+    open_graph,
+)
 from .upsert import (
     GraphWriteError,
     ProvenanceError,
@@ -12,7 +17,8 @@ from .upsert import (
 
 __all__ = [
     "GraphDB",
-    "KuzuNotInstalled",
+    "GraphEngineNotInstalled",
+    "GrafeoNotInstalled",
     "open_graph",
     "upsert_node",
     "upsert_edge",

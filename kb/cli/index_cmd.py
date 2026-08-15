@@ -13,7 +13,7 @@ import typer
 from rich.console import Console
 
 from ..config import KBConfig
-from ..graph.connection import KuzuNotInstalled
+from ..graph.connection import GrafeoNotInstalled
 from ..index.embedder import EmbedderError
 from ..index.indexer import IndexError_, build_index
 from ..index.retrieval import search as run_search
@@ -49,7 +49,7 @@ def cmd_build(kb: Path = _KB_OPT, json_output: bool = _JSON_OPT) -> None:
     try:
         config = KBConfig.load(kb)
         stats = build_index(kb, config)
-    except (FileNotFoundError, KuzuNotInstalled, EmbedderError, IndexError_) as exc:
+    except (FileNotFoundError, GrafeoNotInstalled, EmbedderError, IndexError_) as exc:
         _fail(str(exc), json_output)
         return
     if json_output:
@@ -72,7 +72,7 @@ def search_command(
     try:
         config = KBConfig.load(kb)
         bundle = run_search(kb, query, limit=limit, config=config)
-    except (FileNotFoundError, KuzuNotInstalled, EmbedderError) as exc:
+    except (FileNotFoundError, GrafeoNotInstalled, EmbedderError) as exc:
         _fail(str(exc), json_output)
         return
     if json_output:

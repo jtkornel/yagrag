@@ -1,0 +1,63 @@
+-- Seed schema: document/bibliographic layer + deep sensor-fusion/factor-graph/UGV domain layer + reified Claim pattern.
+-- All node/rel tables carry common provenance properties (id, name, summary, origin, sources, confidence, created_at, updated_at).
+
+-- Node Types
+CREATE NODE TYPE Document (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, kind STRING, path STRING, format STRING, year INT64, url STRING);
+CREATE NODE TYPE Author (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Venue (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Concept (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Method (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE Algorithm (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE Model (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Assumption (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Equation (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, latex STRING, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE Quantity (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, symbol STRING, unit STRING);
+CREATE NODE TYPE Metric (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Dataset (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Tool (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Application (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE System (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE FactorGraph (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Variable (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, symbol STRING, domain STRING, dimension INT64);
+CREATE NODE TYPE Factor (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, factor_type STRING, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE StateEstimator (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE MotionModel (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE SensorModel (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE Sensor (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, modality STRING);
+CREATE NODE TYPE Solver (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Constraint (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE CoordinateFrame (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Robot (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Task (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE NoiseModel (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, code_language STRING, code_path STRING, code_entry STRING, code_status STRING, code_checked_at STRING, code_checker STRING, code_hash STRING);
+CREATE NODE TYPE Claim (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, predicate STRING, object_literal STRING, qualifiers STRING);
+
+-- Edge Types
+CREATE EDGE TYPE CITES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE AUTHORED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE PUBLISHED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE DERIVED_FROM (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE MENTIONS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE DEFINES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SUPPORTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE CONTRADICTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE ABOUT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_OBJECT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE RELATES_TO (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE PART_OF (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SPECIALIZES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE USES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE IMPLEMENTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE APPLIES_TO (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_VARIABLE (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_FACTOR (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE CONNECTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE ESTIMATES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE MEASURES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE ASSUMES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE OPTIMIZES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SOLVED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE DEFINED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE EVALUATED_ON (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE EXPRESSED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_NOISE (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);

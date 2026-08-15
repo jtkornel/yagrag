@@ -1,8 +1,7 @@
 """Schema model for the knowledge base graph.
 
-The schema is expressed as plain Python/Pydantic objects and serialized to
-JSON on disk. Kuzu DDL is generated from the model, so the same declaration
-is used for `apply`, `validate`, and `show`.
+The schema is expressed as Python/Pydantic objects and serialized as native
+ISO GQL / openCypher DDL (`.gql`).
 
 Provenance is enforced structurally: every node and relation type has a set
 of common properties auto-injected (`origin`, `sources`, `confidence`,
@@ -22,7 +21,7 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-# --- Kuzu type whitelist -----------------------------------------------------
+# --- Property types ----------------------------------------------------------
 
 _SCALAR_TYPES = {
     "STRING",
@@ -32,20 +31,26 @@ _SCALAR_TYPES = {
     "INT8",
     "DOUBLE",
     "FLOAT",
+    "FLOAT64",
+    "FLOAT32",
     "BOOL",
+    "BOOLEAN",
     "DATE",
     "TIMESTAMP",
     "UUID",
     "SERIAL",
+    "LIST",
+    "ANY",
 }
 
 
 def _is_valid_type(t: str) -> bool:
-    t = t.strip()
+    t = t.strip().upper()
     if t in _SCALAR_TYPES:
         return True
-    # LIST types: e.g. STRING[], INT64[]
-    if t.endswith("[]") and t[:-2] in _SCALAR_TYPES:
+    if t.startswith("LIST<") and t.endswith(">"):
+        return _is_valid_type(t[5:-1])
+    if t.endswith("[]") and _is_valid_type(t[:-2]):
         return True
     return False
 
@@ -64,7 +69,7 @@ class Property(BaseModel):
     @classmethod
     def _validate_type(cls, v: str) -> str:
         if not _is_valid_type(v):
-            raise ValueError(f"unsupported Kuzu property type: {v!r}")
+            raise ValueError(f"unsupported property type: {v!r}")
         return v
 
 
@@ -75,17 +80,17 @@ NODE_COMMON_PROPERTIES: tuple[Property, ...] = (
     Property(name="name", type="STRING"),
     Property(name="summary", type="STRING"),
     Property(name="origin", type="STRING"),
-    Property(name="sources", type="STRING[]"),
-    Property(name="confidence", type="DOUBLE"),
+    Property(name="sources", type="LIST"),
+    Property(name="confidence", type="FLOAT64"),
     Property(name="created_at", type="TIMESTAMP"),
     Property(name="updated_at", type="TIMESTAMP"),
 )
 
-# Provenance properties for relations (no primary key; Kuzu manages rel ids).
+# Provenance properties for relations.
 REL_COMMON_PROPERTIES: tuple[Property, ...] = (
     Property(name="origin", type="STRING"),
-    Property(name="sources", type="STRING[]"),
-    Property(name="confidence", type="DOUBLE"),
+    Property(name="sources", type="LIST"),
+    Property(name="confidence", type="FLOAT64"),
     Property(name="created_at", type="TIMESTAMP"),
     Property(name="updated_at", type="TIMESTAMP"),
 )
@@ -140,16 +145,9 @@ class RelationType(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    pairs: list[RelPair]
+    pairs: list[RelPair] = Field(default_factory=list)
     properties: list[Property] = Field(default_factory=list)
     include_common: bool = True
-
-    @field_validator("pairs")
-    @classmethod
-    def _at_least_one_pair(cls, v: list[RelPair]) -> list[RelPair]:
-        if not v:
-            raise ValueError("relation type must declare at least one (from, to) pair")
-        return v
 
     def effective_properties(self) -> list[Property]:
         by_name: dict[str, Property] = {p.name: p for p in self.properties}
@@ -174,28 +172,115 @@ class RelationType(BaseModel):
         return ordered
 
 
-# --- DDL rendering -----------------------------------------------------------
+# --- Grafeo / GQL DDL rendering ----------------------------------------------
 
 
-def render_property(p: Property) -> str:
-    return f"{p.name} {p.type}"
+def grafeo_property_type(t: str) -> str:
+    """Map internal scalar/list types to Grafeo property types."""
+    t = t.strip()
+    if t.endswith("[]"):
+        return "LIST"
+    type_map = {
+        "DOUBLE": "FLOAT64",
+        "FLOAT": "FLOAT32",
+        "BOOL": "BOOLEAN",
+    }
+    return type_map.get(t.upper(), t)
 
 
-def render_create_node_table(nt: NodeType) -> str:
+def render_create_node_type_grafeo(nt: NodeType) -> str:
+    """Render a Grafeo `CREATE NODE TYPE` statement."""
     props = nt.effective_properties()
-    pk = next(p for p in props if p.primary_key)
-    cols = ", ".join(render_property(p) for p in props)
-    return f"CREATE NODE TABLE {nt.name}({cols}, PRIMARY KEY({pk.name}))"
+    cols = ", ".join(f"{p.name} {grafeo_property_type(p.type)}" for p in props)
+    return f"CREATE NODE TYPE {nt.name} ({cols})"
 
 
-def render_create_rel_table(rt: RelationType) -> str:
+def render_create_edge_type_grafeo(rt: RelationType) -> str:
+    """Render a Grafeo `CREATE EDGE TYPE` statement."""
     props = rt.effective_properties()
-    pair_parts = [f"FROM {p.from_} TO {p.to}" for p in rt.pairs]
-    parts = pair_parts + [render_property(p) for p in props]
-    return f"CREATE REL TABLE {rt.name}({', '.join(parts)})"
+    cols = ", ".join(f"{p.name} {grafeo_property_type(p.type)}" for p in props)
+    return f"CREATE EDGE TYPE {rt.name} ({cols})"
 
 
-# --- Full schema container ---------------------------------------------------
+# Backward-compatibility aliases
+render_create_node_table = render_create_node_type_grafeo
+render_create_rel_table = render_create_edge_type_grafeo
+
+
+# --- GQL (ISO/IEC 39075) DDL rendering ---------------------------------------
+
+
+def _gql_type(t: str) -> str:
+    """Map internal scalar/list types to standard ISO GQL data types."""
+    t = t.strip()
+    if t == "LIST":
+        return "LIST<STRING>"
+    if t.endswith("[]"):
+        inner = _gql_type(t[:-2])
+        return f"LIST<{inner}>"
+    type_map = {
+        "STRING": "STRING",
+        "INT64": "INT64",
+        "INT32": "INT32",
+        "INT16": "INT16",
+        "INT8": "INT8",
+        "DOUBLE": "FLOAT64",
+        "FLOAT": "FLOAT32",
+        "FLOAT64": "FLOAT64",
+        "FLOAT32": "FLOAT32",
+        "BOOL": "BOOLEAN",
+        "BOOLEAN": "BOOLEAN",
+        "DATE": "DATE",
+        "TIMESTAMP": "TIMESTAMP",
+        "UUID": "UUID",
+        "SERIAL": "INT64",
+        "ANY": "ANY",
+    }
+    return type_map.get(t.upper(), t)
+
+
+def render_gql_property(p: Property) -> str:
+    """Render a single property declaration in ISO GQL syntax."""
+    gql_t = _gql_type(p.type)
+    nullability = " NOT NULL" if p.primary_key else ""
+    return f"{p.name} {gql_t}{nullability}"
+
+
+def render_create_node_type_gql(nt: NodeType) -> str:
+    """Render a standard ISO GQL `NODE TYPE` definition."""
+    props = nt.effective_properties()
+    cols = ",\n        ".join(render_gql_property(p) for p in props)
+    return f"    NODE TYPE {nt.name} {{\n        {cols}\n    }}"
+
+
+def render_create_edge_type_gql(rt: RelationType) -> str:
+    """Render a standard ISO GQL `EDGE TYPE` definition with endpoint pairs."""
+    props = rt.effective_properties()
+    props_decl = ",\n        ".join(render_gql_property(p) for p in props)
+    if rt.pairs:
+        pair_parts = " |\n        ".join(f"{p.from_} TO {p.to}" for p in rt.pairs)
+        return (
+            f"    EDGE TYPE {rt.name} CONNECTING (\n"
+            f"        {pair_parts}\n"
+            f"    ) {{\n"
+            f"        {props_decl}\n"
+            f"    }}"
+        )
+    return f"    EDGE TYPE {rt.name} {{\n        {props_decl}\n    }}"
+
+
+def render_gql_graph_type(
+    schema: Schema, graph_type_name: str = "KnowledgeBaseGraphType"
+) -> str:
+    """Render the full declarative schema as an ISO GQL (ISO/IEC 39075) GRAPH TYPE."""
+    nodes = ",\n\n".join(render_create_node_type_gql(nt) for nt in schema.node_types)
+    edges = ",\n\n".join(render_create_edge_type_gql(rt) for rt in schema.relation_types)
+    return (
+        f"CREATE GRAPH TYPE {graph_type_name} AS {{\n"
+        f"{nodes},\n\n"
+        f"{edges}\n"
+        f"}}"
+    )
 
 
 class Schema(BaseModel):
@@ -286,6 +371,6 @@ class Migration(BaseModel):
                 if rt is None:
                     raise ValueError(f"unknown relation type for add_rel_pair: {raw.table}")
                 if not any(p.from_ == raw.from_ and p.to == raw.to for p in rt.pairs):
-                    rt.pairs.append(RelPair(from_=raw.from_, to=raw.to))
+                    rt.pairs.append(RelPair(**{"from": raw.from_, "to": raw.to}))
             elif isinstance(raw, CypherOp):
                 pass  # opaque

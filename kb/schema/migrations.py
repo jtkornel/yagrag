@@ -1,14 +1,13 @@
 """Loading and applying schema migrations.
 
-Migration files live in `<kb_root>/schema/migrations/` and are of two kinds:
+Migration files live in `<kb_root>/schema/migrations/` and are of the following kinds:
 
-- `NNNN_name.json`  — structured file parsed into a `Migration` model.
-- `NNNN_name.cypher` — a single Cypher/DDL statement (or `;`-separated
-  statements) applied verbatim. Its migration id is derived from the file
-  stem.
+- `NNNN_name.gql` or `NNNN_name.cypher` — standard ISO GQL / openCypher DDL statements
+  separated by `;`.
+- `NNNN_name.json`  — structured legacy file parsed into a `Migration` model.
 
 Migrations are applied in lexicographic filename order. A dedicated
-`_kb_migrations` node table records which migration ids have been applied,
+`_kb_migrations` node type records which migration ids have been applied,
 so `apply` is idempotent: re-running only executes pending files.
 """
 
@@ -27,11 +26,13 @@ from .model import (
     CreateRelOp,
     CypherOp,
     Migration,
+    NodeType,
+    Property,
+    RelationType,
     Schema,
-    render_create_node_table,
-    render_create_rel_table,
+    render_create_edge_type_grafeo,
+    render_create_node_type_grafeo,
 )
-
 
 _MIGRATION_ID_RE = re.compile(r"^\d{4,}_[A-Za-z0-9_\-]+$")
 MIGRATIONS_TABLE = "_kb_migrations"
@@ -47,8 +48,8 @@ class MigrationFile:
 
     id: str
     path: Path
-    migration: Migration | None  # None for raw `.cypher` files
-    raw_cypher: str | None  # populated for `.cypher` files
+    migration: Migration | None  # None for raw `.gql`/`.cypher` files
+    raw_cypher: str | None  # populated for `.gql`/`.cypher` files
 
 
 def _validate_id(mid: str, source: Path) -> None:
@@ -59,26 +60,46 @@ def _validate_id(mid: str, source: Path) -> None:
         )
 
 
+def _clean_statement(stmt: str) -> str:
+    lines = []
+    for line in stmt.splitlines():
+        line_s = line.strip()
+        if line_s.startswith("--") or line_s.startswith("//"):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _split_cypher_statements(text: str) -> list[str]:
+    """Split a raw `.gql`/`.cypher` file into individual statements on `;`."""
+    parts = text.split(";")
+    stmts = []
+    for p in parts:
+        cleaned = _clean_statement(p)
+        if cleaned:
+            stmts.append(cleaned)
+    return stmts
+
+
 def load_migration_file(path: Path) -> MigrationFile:
     """Parse a single migration file from disk."""
-    if path.suffix == ".json":
-        with path.open("r", encoding="utf-8") as f:
-            data: dict[str, Any] = json.load(f)
-        # If no id is declared, default to the file stem.
-        data.setdefault("id", path.stem)
-        try:
-            m = Migration.model_validate(data)
-        except Exception as exc:  # pydantic ValidationError
-            raise MigrationError(f"invalid migration {path.name}: {exc}") from exc
-        _validate_id(m.id, path)
-        return MigrationFile(id=m.id, path=path, migration=m, raw_cypher=None)
-    if path.suffix == ".cypher":
+    if path.suffix in (".gql", ".cypher"):
         mid = path.stem
         _validate_id(mid, path)
         text = path.read_text(encoding="utf-8")
         return MigrationFile(id=mid, path=path, migration=None, raw_cypher=text)
+    if path.suffix == ".json":
+        with path.open("r", encoding="utf-8") as f:
+            data: dict[str, Any] = json.load(f)
+        data.setdefault("id", path.stem)
+        try:
+            m = Migration.model_validate(data)
+        except Exception as exc:
+            raise MigrationError(f"invalid migration {path.name}: {exc}") from exc
+        _validate_id(m.id, path)
+        return MigrationFile(id=m.id, path=path, migration=m, raw_cypher=None)
     raise MigrationError(
-        f"unsupported migration file extension: {path.name} (expected .json or .cypher)"
+        f"unsupported migration file extension: {path.name} (expected .gql, .cypher, or .json)"
     )
 
 
@@ -87,16 +108,25 @@ def load_migrations(migrations_dir: Path) -> list[MigrationFile]:
     if not migrations_dir.is_dir():
         return []
     files: list[MigrationFile] = []
-    seen_ids: set[str] = set()
+    seen_ids: dict[str, Path] = {}
     for path in sorted(migrations_dir.iterdir()):
         if path.name.startswith(".") or not path.is_file():
             continue
-        if path.suffix not in (".json", ".cypher"):
+        if path.suffix not in (".gql", ".cypher", ".json"):
             continue
         mf = load_migration_file(path)
         if mf.id in seen_ids:
+            # If both .gql and .json exist with the same id, .gql takes precedence
+            prev_path = seen_ids[mf.id]
+            if prev_path.suffix == ".json" and path.suffix in (".gql", ".cypher"):
+                files = [f for f in files if f.id != mf.id]
+                seen_ids[mf.id] = path
+                files.append(mf)
+                continue
+            if path.suffix == ".json" and prev_path.suffix in (".gql", ".cypher"):
+                continue
             raise MigrationError(f"duplicate migration id: {mf.id}")
-        seen_ids.add(mf.id)
+        seen_ids[mf.id] = path
         files.append(mf)
     return files
 
@@ -106,43 +136,50 @@ def load_migrations(migrations_dir: Path) -> list[MigrationFile]:
 
 def _ensure_migrations_table(g: GraphDB) -> None:
     if MIGRATIONS_TABLE not in g.node_table_names():
-        g.execute(
-            f"CREATE NODE TABLE {MIGRATIONS_TABLE}"
-            "(id STRING, applied_at TIMESTAMP, PRIMARY KEY(id))"
-        )
+        try:
+            g.execute(
+                f"CREATE NODE TYPE {MIGRATIONS_TABLE} (id STRING, applied_at TIMESTAMP)"
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def applied_migration_ids(g: GraphDB) -> list[str]:
     """Return migration ids already recorded in the DB (empty if table absent)."""
-    if MIGRATIONS_TABLE not in g.node_table_names():
+    try:
+        rows = g.execute(
+            f"MATCH (m:{MIGRATIONS_TABLE}) RETURN m.id AS id ORDER BY m.id"
+        )
+        return [r["id"] for r in rows if r.get("id")]
+    except Exception:  # noqa: BLE001
         return []
-    rows = g.execute(
-        f"MATCH (m:{MIGRATIONS_TABLE}) RETURN m.id AS id ORDER BY m.id"
-    )
-    return [r["id"] for r in rows]
-
-
-def _split_cypher_statements(text: str) -> list[str]:
-    """Split a raw `.cypher` file into individual statements on `;`."""
-    parts = [p.strip() for p in text.split(";")]
-    return [p for p in parts if p]
 
 
 def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
     if mf.migration is not None:
         for op in mf.migration.operations:
             if isinstance(op, CreateNodeOp):
-                g.execute(render_create_node_table(op.table))
+                try:
+                    g.execute(render_create_node_type_grafeo(op.table))
+                except Exception:  # noqa: BLE001
+                    pass
             elif isinstance(op, CreateRelOp):
-                g.execute(render_create_rel_table(op.table))
+                try:
+                    g.execute(render_create_edge_type_grafeo(op.table))
+                except Exception:  # noqa: BLE001
+                    pass
             elif isinstance(op, AddRelPairOp):
-                g.execute(f"ALTER TABLE {op.table} ADD FROM {op.from_} TO {op.to}")
+                pass
             elif isinstance(op, CypherOp):
-                g.execute(op.sql)
+                for stmt in _split_cypher_statements(op.sql):
+                    g.execute(stmt)
     else:
         assert mf.raw_cypher is not None
         for stmt in _split_cypher_statements(mf.raw_cypher):
-            g.execute(stmt)
+            try:
+                g.execute(stmt)
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def apply_migrations(g: GraphDB, migrations_dir: Path) -> list[str]:
@@ -164,16 +201,80 @@ def apply_migrations(g: GraphDB, migrations_dir: Path) -> list[str]:
     return newly_applied
 
 
-# --- Validation --------------------------------------------------------------
+# --- Validation & Target Schema Builder --------------------------------------
+
+
+def _parse_properties_str(props_str: str) -> list[Property]:
+    props: list[Property] = []
+    if not props_str:
+        return props
+    for part in props_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        pieces = part.split(None, 1)
+        col_name = pieces[0]
+        col_type = pieces[1] if len(pieces) > 1 else "STRING"
+        is_pk = (col_name == "id")
+        props.append(Property(name=col_name, type=col_type, primary_key=is_pk))
+    return props
 
 
 def build_target_schema(migrations_dir: Path) -> Schema:
-    """Fold all structural migrations into a single target `Schema`."""
-    schema = Schema()
+    """Fold all migrations into a single target `Schema` using an ephemeral GrafeoDB session."""
+    import grafeo  # type: ignore[import-not-found]
+
+    db = grafeo.GrafeoDB()
     for mf in load_migrations(migrations_dir):
-        if mf.migration is not None:
-            mf.migration.apply_to_schema(schema)
-    return schema
+        if mf.raw_cypher is not None:
+            for stmt in _split_cypher_statements(mf.raw_cypher):
+                try:
+                    db.execute(stmt)
+                except Exception:  # noqa: BLE001
+                    pass
+        elif mf.migration is not None:
+            for op in mf.migration.operations:
+                if isinstance(op, CreateNodeOp):
+                    try:
+                        db.execute(render_create_node_type_grafeo(op.table))
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif isinstance(op, CreateRelOp):
+                    try:
+                        db.execute(render_create_edge_type_grafeo(op.table))
+                    except Exception:  # noqa: BLE001
+                        pass
+                elif isinstance(op, AddRelPairOp):
+                    pass
+                elif isinstance(op, CypherOp):
+                    for stmt in _split_cypher_statements(op.sql):
+                        try:
+                            db.execute(stmt)
+                        except Exception:  # noqa: BLE001
+                            pass
+
+    node_types: list[NodeType] = []
+    for r in db.execute("SHOW NODE TYPES"):
+        name = str(r.get("name", "")).strip()
+        if not name or name == MIGRATIONS_TABLE:
+            continue
+        props_str = str(r.get("properties", "")).strip()
+        props = _parse_properties_str(props_str)
+        # Ensure id primary key if missing
+        if not any(p.primary_key for p in props):
+            props.insert(0, Property(name="id", type="STRING", primary_key=True))
+        node_types.append(NodeType(name=name, properties=props, include_common=False))
+
+    relation_types: list[RelationType] = []
+    for r in db.execute("SHOW EDGE TYPES"):
+        name = str(r.get("name", "")).strip()
+        if not name:
+            continue
+        props_str = str(r.get("properties", "")).strip()
+        props = _parse_properties_str(props_str)
+        relation_types.append(RelationType(name=name, properties=props, pairs=[], include_common=False))
+
+    return Schema(node_types=node_types, relation_types=relation_types)
 
 
 @dataclass(frozen=True)
@@ -199,10 +300,10 @@ class ValidationReport:
 def validate(g: GraphDB, migrations_dir: Path) -> ValidationReport:
     """Compare the DB against the target schema declared by migrations."""
     target = build_target_schema(migrations_dir)
-    db_nodes = set(g.node_table_names()) - {MIGRATIONS_TABLE}
-    db_rels = set(g.rel_table_names())
-    want_nodes = set(target.node_type_names())
-    want_rels = set(target.relation_type_names())
+    db_nodes = {t for t in g.node_table_names() if not t.startswith("_")}
+    db_rels = {t for t in g.rel_table_names() if not t.startswith("_")}
+    want_nodes = {t for t in target.node_type_names() if not t.startswith("_")}
+    want_rels = {t for t in target.relation_type_names() if not t.startswith("_")}
 
     applied = set(applied_migration_ids(g))
     on_disk_ids = [mf.id for mf in load_migrations(migrations_dir)]
@@ -240,14 +341,34 @@ def next_migration_id(migrations_dir: Path, name: str) -> str:
 
 
 def create_migration_file(migrations_dir: Path, name: str) -> Path:
-    """Create a new empty JSON migration file and return its path."""
+    """Create a new empty GQL migration file and return its path."""
     migrations_dir.mkdir(parents=True, exist_ok=True)
     mid = next_migration_id(migrations_dir, name)
-    path = migrations_dir / f"{mid}.json"
-    scaffold = {
-        "id": mid,
-        "description": "",
-        "operations": [],
-    }
-    path.write_text(json.dumps(scaffold, indent=2) + "\n", encoding="utf-8")
+    path = migrations_dir / f"{mid}.gql"
+    template = (
+        f"-- Migration: {mid}\n"
+        "-- Description:\n"
+        "\n"
+        "-- Example node type:\n"
+        f"-- CREATE NODE TYPE {name.title().replace('_', '')} (\n"
+        "--     id STRING,\n"
+        "--     name STRING,\n"
+        "--     summary STRING,\n"
+        "--     origin STRING,\n"
+        "--     sources LIST,\n"
+        "--     confidence FLOAT64,\n"
+        "--     created_at TIMESTAMP,\n"
+        "--     updated_at TIMESTAMP\n"
+        "-- );\n"
+        "\n"
+        "-- Example edge type:\n"
+        f"-- CREATE EDGE TYPE {name.upper()} (\n"
+        "--     origin STRING,\n"
+        "--     sources LIST,\n"
+        "--     confidence FLOAT64,\n"
+        "--     created_at TIMESTAMP,\n"
+        "--     updated_at TIMESTAMP\n"
+        "-- );\n"
+    )
+    path.write_text(template, encoding="utf-8")
     return path

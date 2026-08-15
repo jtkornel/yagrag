@@ -1,4 +1,4 @@
-"""Tests for the Kuzu graph layer and versioned schema management (Step 2).
+"""Tests for the Grafeo graph layer and versioned GQL schema management.
 
 Covers: DDL rendering, migration loading, apply/validate round-trip via the
 CLI, a reified Claim write/read, and a follow-up migration adding a new
@@ -21,8 +21,9 @@ from kb.schema.model import (
     Property,
     RelationType,
     RelPair,
-    render_create_node_table,
-    render_create_rel_table,
+    render_create_edge_type_grafeo,
+    render_create_node_type_grafeo,
+    render_gql_graph_type,
     Schema,
 )
 from kb.schema.migrations import (
@@ -36,7 +37,7 @@ from kb.schema.migrations import (
 
 runner = CliRunner()
 
-pytest.importorskip("kuzu")
+pytest.importorskip("grafeo")
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -50,77 +51,40 @@ def kb_dir(tmp_path: Path) -> Path:
     return tmp_path / "kb"
 
 
-def _write_migration(kb: Path, data: dict) -> Path:
-    path = kb / "schema" / "migrations" / f"{data['id']}.json"
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+INIT_GQL = """
+-- Document layer + minimal domain layer + reified Claim.
+CREATE NODE TYPE Document (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, kind STRING, path STRING);
+CREATE NODE TYPE Concept (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE NODE TYPE Claim (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, predicate STRING, object_literal STRING, qualifiers STRING);
+
+CREATE EDGE TYPE MENTIONS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE ABOUT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_OBJECT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+"""
+
+
+def _write_gql_migration(kb: Path, mid: str, gql_text: str) -> Path:
+    path = kb / "schema" / "migrations" / f"{mid}.gql"
+    path.write_text(gql_text, encoding="utf-8")
     return path
-
-
-INIT_MIGRATION = {
-    "id": "0001_init",
-    "description": "Document layer + minimal domain layer + reified Claim.",
-    "operations": [
-        {"op": "create_node_table", "table": {"name": "Document"}},
-        {"op": "create_node_table", "table": {"name": "Concept"}},
-        {
-            "op": "create_node_table",
-            "table": {
-                "name": "Claim",
-                "properties": [
-                    {"name": "predicate", "type": "STRING"},
-                    {"name": "object_literal", "type": "STRING"},
-                    {"name": "qualifiers", "type": "STRING"},
-                ],
-            },
-        },
-        {
-            "op": "create_rel_table",
-            "table": {
-                "name": "MENTIONS",
-                "pairs": [{"from": "Document", "to": "Concept"}],
-            },
-        },
-        {
-            "op": "create_rel_table",
-            "table": {
-                "name": "ABOUT",
-                "pairs": [{"from": "Claim", "to": "Concept"}],
-            },
-        },
-        {
-            "op": "create_rel_table",
-            "table": {
-                "name": "HAS_OBJECT",
-                "pairs": [{"from": "Claim", "to": "Concept"}],
-            },
-        },
-    ],
-}
 
 
 # --- DDL rendering ------------------------------------------------------------
 
 
 def test_render_node_table_injects_common_properties() -> None:
-    ddl = render_create_node_table(NodeType(name="Concept"))
-    assert ddl.startswith("CREATE NODE TABLE Concept(")
-    for col in ("id STRING", "origin STRING", "sources STRING[]", "confidence DOUBLE"):
+    ddl = render_create_node_type_grafeo(NodeType(name="Concept"))
+    assert ddl.startswith("CREATE NODE TYPE Concept (")
+    for col in ("id STRING", "origin STRING", "sources LIST", "confidence FLOAT64"):
         assert col in ddl
-    assert ddl.endswith("PRIMARY KEY(id))")
 
 
-def test_render_rel_table_multiple_pairs() -> None:
-    rt = RelationType(
-        name="MENTIONS",
-        pairs=[
-            RelPair.model_validate({"from": "Document", "to": "Concept"}),
-            RelPair.model_validate({"from": "Document", "to": "Claim"}),
-        ],
-    )
-    ddl = render_create_rel_table(rt)
-    assert "FROM Document TO Concept" in ddl
-    assert "FROM Document TO Claim" in ddl
+def test_render_rel_table_properties() -> None:
+    rt = RelationType(name="MENTIONS")
+    ddl = render_create_edge_type_grafeo(rt)
+    assert ddl.startswith("CREATE EDGE TYPE MENTIONS (")
     assert "origin STRING" in ddl
+    assert "sources LIST" in ddl
 
 
 def test_node_type_requires_exactly_one_primary_key() -> None:
@@ -131,22 +95,22 @@ def test_node_type_requires_exactly_one_primary_key() -> None:
 
 def test_invalid_property_type_rejected() -> None:
     with pytest.raises(ValueError, match="unsupported"):
-        Property(name="x", type="BLOB")
+        Property(name="x", type="BLOB_UNSUPPORTED")
 
 
 # --- migration loading ----------------------------------------------------------
 
 
 def test_load_migrations_ordering_and_ids(kb_dir: Path) -> None:
-    _write_migration(kb_dir, {"id": "0002_second", "operations": []})
-    _write_migration(kb_dir, {"id": "0001_first", "operations": []})
+    _write_gql_migration(kb_dir, "0002_second", "-- second\n")
+    _write_gql_migration(kb_dir, "0001_first", "-- first\n")
     mfs = load_migrations(kb_dir / "schema" / "migrations")
     assert [m.id for m in mfs] == ["0001_first", "0002_second"]
 
 
 def test_bad_migration_id_rejected(kb_dir: Path) -> None:
-    path = kb_dir / "schema" / "migrations" / "bad-name.json"
-    path.write_text(json.dumps({"id": "bad-name", "operations": []}), encoding="utf-8")
+    path = kb_dir / "schema" / "migrations" / "bad-name.gql"
+    path.write_text("-- invalid\n", encoding="utf-8")
     with pytest.raises(MigrationError, match="invalid migration id"):
         load_migrations(kb_dir / "schema" / "migrations")
 
@@ -154,12 +118,12 @@ def test_bad_migration_id_rejected(kb_dir: Path) -> None:
 def test_next_migration_id(kb_dir: Path) -> None:
     mdir = kb_dir / "schema" / "migrations"
     assert next_migration_id(mdir, "init") == "0001_init"
-    _write_migration(kb_dir, {"id": "0001_init", "operations": []})
+    _write_gql_migration(kb_dir, "0001_init", "-- init\n")
     assert next_migration_id(mdir, "add_solver") == "0002_add_solver"
 
 
 def test_build_target_schema_folds_migrations(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     schema = build_target_schema(kb_dir / "schema" / "migrations")
     assert set(schema.node_type_names()) == {"Document", "Concept", "Claim"}
     assert set(schema.relation_type_names()) == {"MENTIONS", "ABOUT", "HAS_OBJECT"}
@@ -169,7 +133,7 @@ def test_build_target_schema_folds_migrations(kb_dir: Path) -> None:
 
 
 def test_schema_apply_validate_roundtrip_cli(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
 
     result = runner.invoke(app, ["schema", "apply", "--kb", str(kb_dir), "--json"])
     assert result.exit_code == 0, result.output
@@ -188,7 +152,7 @@ def test_schema_apply_validate_roundtrip_cli(kb_dir: Path) -> None:
 
 
 def test_schema_validate_fails_on_pending_migration(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     result = runner.invoke(app, ["schema", "validate", "--kb", str(kb_dir), "--json"])
     assert result.exit_code == 1
     report = json.loads(result.output)
@@ -197,7 +161,7 @@ def test_schema_validate_fails_on_pending_migration(kb_dir: Path) -> None:
 
 
 def test_schema_show_cli(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     result = runner.invoke(app, ["schema", "show", "--kb", str(kb_dir), "--json"])
     assert result.exit_code == 0
     schema = Schema.model_validate_json(result.output)
@@ -205,7 +169,7 @@ def test_schema_show_cli(kb_dir: Path) -> None:
 
 
 def test_schema_show_type_filter_cli(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     result = runner.invoke(app, ["schema", "show", "-t", "Concept", "--kb", str(kb_dir), "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -222,15 +186,16 @@ def test_schema_migrate_scaffolds_file(kb_dir: Path) -> None:
     payload = json.loads(result.output)
     assert payload["id"] == "0001_add_noise_model"
     assert Path(payload["created"]).is_file()
+    assert payload["created"].endswith(".gql")
 
 
 # --- Claim write/read + domain migration ---------------------------------------
 
 
 def test_claim_write_read_and_domain_migration(kb_dir: Path) -> None:
-    _write_migration(kb_dir, INIT_MIGRATION)
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     mdir = kb_dir / "schema" / "migrations"
-    db_path = kb_dir / "graph.kuzu"
+    db_path = kb_dir / "graph.grafeo"
 
     with GraphDB(db_path) as g:
         apply_migrations(g, mdir)
@@ -258,22 +223,14 @@ def test_claim_write_read_and_domain_migration(kb_dir: Path) -> None:
         ]
 
     # A second migration adds a domain-specific node + relation type.
-    _write_migration(
+    _write_gql_migration(
         kb_dir,
-        {
-            "id": "0002_add_factor_variable",
-            "operations": [
-                {"op": "create_node_table", "table": {"name": "Factor"}},
-                {"op": "create_node_table", "table": {"name": "Variable"}},
-                {
-                    "op": "create_rel_table",
-                    "table": {
-                        "name": "CONNECTS",
-                        "pairs": [{"from": "Factor", "to": "Variable"}],
-                    },
-                },
-            ],
-        },
+        "0002_add_factor_variable",
+        """
+        CREATE NODE TYPE Factor (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+        CREATE NODE TYPE Variable (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+        CREATE EDGE TYPE CONNECTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+        """,
     )
     with GraphDB(db_path) as g:
         newly = apply_migrations(g, mdir)
@@ -287,10 +244,10 @@ def test_claim_write_read_and_domain_migration(kb_dir: Path) -> None:
 def test_raw_cypher_migration(kb_dir: Path) -> None:
     mdir = kb_dir / "schema" / "migrations"
     (mdir / "0001_raw.cypher").write_text(
-        "CREATE NODE TABLE Sensor(id STRING, name STRING, PRIMARY KEY(id));\n",
+        "CREATE NODE TYPE Sensor(id STRING, name STRING);\n",
         encoding="utf-8",
     )
-    with GraphDB(kb_dir / "graph.kuzu") as g:
+    with GraphDB(kb_dir / "graph.grafeo") as g:
         newly = apply_migrations(g, mdir)
         assert newly == ["0001_raw"]
         assert "Sensor" in g.node_table_names()
@@ -309,3 +266,29 @@ def test_migration_fold_rejects_duplicate_type() -> None:
     )
     with pytest.raises(ValueError, match="duplicate node type"):
         m.apply_to_schema(schema)
+
+
+def test_render_gql_graph_type() -> None:
+    schema = Schema(
+        node_types=[NodeType(name="Document"), NodeType(name="Author")],
+        relation_types=[
+            RelationType(
+                name="AUTHORED_BY",
+                pairs=[RelPair.model_validate({"from": "Document", "to": "Author"})],
+            )
+        ],
+    )
+    gql = render_gql_graph_type(schema, "TestGraphType")
+    assert "CREATE GRAPH TYPE TestGraphType AS {" in gql
+    assert "NODE TYPE Document {" in gql
+    assert "EDGE TYPE AUTHORED_BY CONNECTING (" in gql
+    assert "Document TO Author" in gql
+
+
+def test_cli_schema_show_gql(kb_dir: Path) -> None:
+    _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
+    result = runner.invoke(app, ["schema", "show", "--kb", str(kb_dir), "--gql"])
+    assert result.exit_code == 0
+    assert "CREATE GRAPH TYPE KnowledgeBaseGraphType AS {" in result.output
+    assert "NODE TYPE Document" in result.output
+    assert "EDGE TYPE MENTIONS" in result.output

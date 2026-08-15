@@ -3,7 +3,7 @@ name = "kb"
 version = "0.1.0"
 description = "Lightweight local-first GraphRAG knowledge base CLI (deterministic; LLM lives in the agent)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "graphrag_knowledge_base" }]
 dependencies = [
@@ -11,10 +11,11 @@ dependencies = [
     "rich>=13.7.0",
     "pydantic>=2.6.0",
     "tomli>=2.0.1; python_version < '3.11'",
+    "grafeo>=0.5.42",
 ]
 
 [project.optional-dependencies]
-graph = ["kuzu>=0.6.0"]
+graph = ["grafeo>=0.5.42"]
 embed = ["fastembed>=0.3.0"]
 pdf = ["pypdf>=4.0.0"]
 math = ["sympy>=1.12"]
@@ -33,3 +34,6 @@ packages = ["kb"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+filterwarnings = [
+    "ignore:.*utcfromtimestamp.*:DeprecationWarning",
+]

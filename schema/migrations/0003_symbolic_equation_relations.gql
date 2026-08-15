@@ -1,0 +1,4 @@
+-- Add USES_SYMBOL and EXPRESSED_BY relation tables for formal mathematical and symbolic linking.
+
+CREATE EDGE TYPE USES_SYMBOL (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE EXPRESSED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);

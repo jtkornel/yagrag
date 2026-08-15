@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from kb.cli.main import app
 
-pytest.importorskip("kuzu")
+pytest.importorskip("grafeo")
 
 runner = CliRunner()
 

@@ -48,11 +48,11 @@ def test_init_creates_full_layout(tmp_path: Path) -> None:
     config = KBConfig.load(kb_root)
     assert config.name == "my-kb"
     assert config.paths.raw == "documents/raw"
-    assert config.paths.graph_db == "graph.kuzu"
+    assert config.paths.graph_db == "graph.grafeo"
 
-    # `graph.kuzu/` is intentionally NOT created at init time; the graph
+    # Graph DB is intentionally NOT created at init time; the graph
     # layer materializes it when the schema is first applied (Step 2).
-    assert not (kb_root / "graph.kuzu").exists()
+    assert not (kb_root / config.paths.graph_db).exists()
 
 
 def test_init_is_idempotent(tmp_path: Path) -> None:

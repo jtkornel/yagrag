@@ -17,7 +17,7 @@ from rich.table import Table
 from .. import code as kb_code
 from ..code import checker as code_checker
 from ..config import KBConfig
-from ..graph.connection import GraphDB, KuzuNotInstalled
+from ..graph.connection import GrafeoNotInstalled, GraphDB
 
 
 code_app = typer.Typer(
@@ -49,7 +49,7 @@ def _load_config(kb_root: Path, json_output: bool) -> KBConfig:
 def _open_db(kb_root: Path, config: KBConfig, json_output: bool) -> GraphDB:
     try:
         return GraphDB(kb_root / config.paths.graph_db)
-    except KuzuNotInstalled as exc:
+    except GrafeoNotInstalled as exc:
         _fail(str(exc), json_output)
         raise AssertionError  # unreachable
 

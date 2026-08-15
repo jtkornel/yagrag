@@ -14,10 +14,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-pytest.importorskip("kuzu")
+pytest.importorskip("grafeo")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_SCRIPT = REPO_ROOT / "examples" / "factor-graph-slam" / "build_example.sh"
@@ -38,7 +39,7 @@ def _kb(kb_dir: Path, *args: str) -> str:
     return result.stdout
 
 
-def _query(kb_dir: Path, cypher: str) -> list[dict]:
+def _query(kb_dir: Path, cypher: str) -> list[dict[str, Any]]:
     return json.loads(_kb(kb_dir, "graph", "query", cypher))["rows"]
 
 

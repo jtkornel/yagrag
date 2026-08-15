@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
@@ -29,10 +30,10 @@ from kb.graph.connection import open_graph
 
 runner = CliRunner()
 
-pytest.importorskip("kuzu")
+pytest.importorskip("grafeo")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SEED_MIGRATION = REPO_ROOT / "schema" / "migrations" / "0001_seed_domain.json"
+SEED_MIGRATION = REPO_ROOT / "schema" / "migrations" / "0001_seed_domain.gql"
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -48,7 +49,7 @@ def kb_root(tmp_path: Path) -> Path:
     return root
 
 
-def _upsert(kb_root: Path, label: str, props: dict) -> None:
+def _upsert(kb_root: Path, label: str, props: dict[str, Any]) -> None:
     result = runner.invoke(
         app,
         ["graph", "upsert-node", label, "--props", json.dumps(props), "--kb", str(kb_root)],
@@ -56,7 +57,7 @@ def _upsert(kb_root: Path, label: str, props: dict) -> None:
     assert result.exit_code == 0, result.output
 
 
-def _prov(extra: dict | None = None) -> dict:
+def _prov(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     props = {"origin": "raw", "sources": ["raw-0001"]}
     props.update(extra or {})
     return props
@@ -69,13 +70,13 @@ def _write_code(kb_root: Path, rel: str, content: str) -> str:
     return f"code/{rel}"
 
 
-def _check(kb_root: Path, *args: str) -> dict:
+def _check(kb_root: Path, *args: str) -> dict[str, Any]:
     result = runner.invoke(app, ["code", "check", "--kb", str(kb_root), "--json", *args])
     assert result.exit_code == 0, result.output
     return json.loads(result.stdout)
 
 
-def _by_ref(payload: dict) -> dict[str, dict]:
+def _by_ref(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {f"{r['label']}:{r['id']}": r for r in payload["results"]}
 
 

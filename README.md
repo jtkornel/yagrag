@@ -24,7 +24,7 @@ First milestone complete (feature-complete for this stage):
 
 - **Deterministic CLI (`kb`)**: scriptable, offline, provenance-enforced operations with **no LLM calls**.
 - **Document store**: raw immutable ingestion + synthesized documents with provenance.
-- **Kuzu graph + layered seed schema**: a domain-appropriate property graph with a reified `Claim` pattern.
+- **Embedded property graph (Grafeo) + layered seed schema**: a domain-appropriate property graph with ISO GQL / openCypher support and a reified `Claim` pattern.
 - **Hybrid retrieval**: embeddings + full-text + graph context bundles via `kb search`.
 - **Agent skills**: structured `.md` skill files that drive reasoning purely by invoking the CLI.
 
@@ -57,7 +57,7 @@ my-kb/
   schema/
     migrations/           # versioned schema migrations (copy in the seed schema here)
   code/                   # statically checkable snippets referenced by `code_path`
-  graph.kuzu/             # embedded Kuzu database directory (created on first `kb schema apply`)
+  graph.grafeo/           # embedded Grafeo database directory (created on first `kb schema apply`)
 ```
 
 ### The worked example
@@ -299,7 +299,7 @@ Run tests with:
 
 Optional extras:
 
-- `graph` (kuzu)
+- `graph` (grafeo)
 - `embed` (fastembed)
 - `math` (sympy)
 - `pdf` (pypdf)

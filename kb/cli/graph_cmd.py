@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..config import KBConfig
-from ..graph.connection import GraphDB, KuzuNotInstalled
+from ..graph.connection import GrafeoNotInstalled, GraphDB
 from ..graph.upsert import (
     GraphWriteError,
     ProvenanceError,
@@ -56,7 +56,7 @@ def _open_db(kb: Path, json_output: bool) -> GraphDB:
     try:
         config = KBConfig.load(kb)
         return GraphDB(kb / config.paths.graph_db)
-    except (FileNotFoundError, KuzuNotInstalled) as exc:
+    except (FileNotFoundError, GrafeoNotInstalled) as exc:
         _fail(str(exc), json_output)
         raise AssertionError  # unreachable
 
@@ -73,7 +73,7 @@ def _parse_props(props: str, json_output: bool) -> dict[str, Any]:
 
 
 def _jsonable(value: Any) -> Any:
-    """Coerce Kuzu row values (timestamps, nested structs) into JSON-safe data."""
+    """Coerce database row values (timestamps, nested structs) into JSON-safe data."""
     if isinstance(value, dict):
         return {k: _jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -230,18 +230,39 @@ def cmd_export(
     try:
         nodes: dict[str, list[dict[str, Any]]] = {}
         for table in g.node_table_names():
-            if table == MIGRATIONS_TABLE:
+            if table == MIGRATIONS_TABLE or table.startswith("_"):
                 continue
-            rows = g.execute(f"MATCH (n:{table}) RETURN n.*")
-            nodes[table] = [_jsonable(r) for r in rows]
+            rows = g.execute(f"MATCH (n:{table}) RETURN n")
+            cleaned_rows: list[dict[str, Any]] = []
+            for r in rows:
+                n_val = r.get("n")
+                props: dict[str, Any] = n_val if isinstance(n_val, dict) else r
+                cleaned_rows.append({
+                    (k.split(".", 1)[-1] if "." in k else k): v
+                    for k, v in props.items()
+                    if not k.startswith("_")
+                })
+            nodes[table] = [_jsonable(r) for r in cleaned_rows]
         rels: dict[str, list[dict[str, Any]]] = {}
         for table in g.rel_table_names():
             rows = g.execute(
                 f"MATCH (a)-[r:{table}]->(b) "
-                "RETURN a.id AS from_id, b.id AS to_id, r.*"
+                "RETURN a.id AS from_id, b.id AS to_id, r"
             )
-            rels[table] = [_jsonable(r) for r in rows]
-    except RuntimeError as exc:
+            cleaned_rels: list[dict[str, Any]] = []
+            for r in rows:
+                from_id = r.get("from_id")
+                to_id = r.get("to_id")
+                r_val = r.get("r")
+                rel_props: dict[str, Any] = r_val if isinstance(r_val, dict) else r
+                rel_dict = {"from_id": from_id, "to_id": to_id}
+                for k, v in rel_props.items():
+                    k_clean = k.split(".", 1)[-1] if "." in k else k
+                    if not k_clean.startswith("_") and k_clean not in ("from_id", "to_id"):
+                        rel_dict[k_clean] = v
+                cleaned_rels.append(rel_dict)
+            rels[table] = [_jsonable(r) for r in cleaned_rels]
+    except Exception as exc:
         _fail(str(exc), json_output)
         return
     finally:
@@ -409,10 +430,12 @@ def cmd_lint(
 
         # 3. Dynamic capability & schema property checks (symbol, code_status, provenance)
         for nt in node_tables:
-            rows = g.execute(f"MATCH (n:{nt}) RETURN n.*")
+            rows = g.execute(f"MATCH (n:{nt}) RETURN n")
             for r in rows:
-                nid = r.get("n.id")
-                sources = r.get("n.sources")
+                n_val = r.get("n")
+                props: dict[str, Any] = n_val if isinstance(n_val, dict) else r
+                nid = props.get("id")
+                sources = props.get("sources")
 
                 # Provenance check (all domain nodes)
                 if sources is not None and (not sources or len(sources) == 0):
@@ -427,8 +450,8 @@ def cmd_lint(
                     )
 
                 # Symbol check: if table carries a 'symbol' property
-                if "n.symbol" in r:
-                    sym = r.get("n.symbol") or ""
+                if "symbol" in props:
+                    sym = props.get("symbol") or ""
                     if sym and len(sym) > 30:
                         issues.append(
                             {
@@ -441,8 +464,8 @@ def cmd_lint(
                         )
 
                 # Code status check: if table carries 'code_status' property
-                if "n.code_status" in r:
-                    status = r.get("n.code_status")
+                if "code_status" in props:
+                    status = props.get("code_status")
                     if status and status == "failed":
                         issues.append(
                             {
@@ -560,17 +583,19 @@ def cmd_dedupe(
 
     try:
         for nt in target_labels:
-            rows = g.execute(f"MATCH (n:{nt}) RETURN n.*")
+            rows = g.execute(f"MATCH (n:{nt}) RETURN n")
             if len(rows) < 2:
                 continue
 
             nodes = []
             for r in rows:
-                nid = r.get("n.id")
-                name = r.get("n.name") or ""
-                summary = r.get("n.summary") or ""
-                sources = r.get("n.sources") or []
-                symbol = r.get("n.symbol")
+                n_val = r.get("n")
+                props: dict[str, Any] = n_val if isinstance(n_val, dict) else r
+                nid = props.get("id")
+                name = props.get("name") or ""
+                summary = props.get("summary") or ""
+                sources = props.get("sources") or []
+                symbol = props.get("symbol")
                 nodes.append(
                     {
                         "id": nid,
@@ -578,7 +603,7 @@ def cmd_dedupe(
                         "summary": summary,
                         "sources": sources,
                         "symbol": symbol,
-                        "row": r,
+                        "row": props,
                     }
                 )
 

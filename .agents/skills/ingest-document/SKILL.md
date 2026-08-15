@@ -23,7 +23,7 @@ Trigger this skill when:
     *   `--url U`: Source URL if downloaded from the web.
 4.  **Capture ID**: The CLI will return a unique document ID (e.g., `raw-0001`). You must record this ID; it is the primary key for all graph entities derived from this document.
 5.  **Verify Content & Metadata**: Run `kb doc text <id>` to ensure the text was extracted correctly. If the text is empty or garbled, the ingest failed. Run `kb doc show <id>` to check metadata. Verify that `manifest.json` holds the clean, human-readable title rather than a filename hash.
-6.  **Graph Node Creation & Automatic Stub Reconciliation**: If the graph database exists, `kb doc add` automatically upserts the corresponding `Document` node in Kuzu DB using the title provided. If a placeholder stub (`kind: "stub"`) already existed for this paper from earlier citations, `kb doc add` automatically reconciles the stub and redirects all existing `CITES` edges to the new document ID.
+6.  **Graph Node Creation & Automatic Stub Reconciliation**: If the graph database exists, `kb doc add` automatically upserts the corresponding `Document` node in the Grafeo graph database using the title provided. If a placeholder stub (`kind: "stub"`) already existed for this paper from earlier citations, `kb doc add` automatically reconciles the stub and redirects all existing `CITES` edges to the new document ID.
 7.  **Hand off**: Proceed to `deep-knowledge-extraction` to extract domain entities and record bibliography citations using `kb doc cite`.
 
 ## Rules
