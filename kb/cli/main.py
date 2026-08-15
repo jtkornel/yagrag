@@ -19,6 +19,7 @@ from .code_cmd import code_app
 from .doc_cmd import doc_app
 from .graph_cmd import graph_app
 from .index_cmd import index_app, search_command
+from .math_cmd import math_app
 from .schema_cmd import schema_app
 
 app = typer.Typer(
@@ -32,6 +33,7 @@ app.add_typer(schema_app)
 app.add_typer(doc_app)
 app.add_typer(graph_app)
 app.add_typer(index_app)
+app.add_typer(math_app, name="math")
 app.command("search")(search_command)
 
 _console = Console()

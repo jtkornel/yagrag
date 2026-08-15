@@ -289,6 +289,7 @@ Supported migration operations:
 | `kb index` | `build` |
 | `kb search` | (hybrid retrieval + context bundle) |
 | `kb code` | `list`, `show`, `check` |
+| `kb math` | `derive`, `glossary` |
 
 Machine-readable output: use `--json`. All KB-aware subcommands (everything except `kb init`) accept `--kb <path>` (default: `.`).
 
@@ -302,7 +303,7 @@ Run all codebase quality gating checks (linter and unit/e2e tests) with:
 
 Individual checks:
 - Linter: `ruff check .`
-- Test suite: `pytest -W error` (115 tests)
+- Test suite: `pytest -W error` (126 tests)
 - Static code check on a knowledge base: `kb code check --all --kb <path>`
 
 Optional extras:
