@@ -51,3 +51,11 @@ exclude = [
 ignore = [
     "B008",  # Typer argument / option defaults
 ]
+
+[tool.pyright]
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+include = ["kb", "tests", "scripts"]
+exclude = ["kb-data", ".venv", "papers"]
+stubPath = "typings"

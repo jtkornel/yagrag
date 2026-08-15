@@ -1,0 +1,8 @@
+{
+  "typeCheckingMode": "standard",
+  "venvPath": ".",
+  "venv": ".venv",
+  "include": ["kb", "tests", "scripts"],
+  "exclude": ["kb-data", ".venv", "papers"],
+  "stubPath": "typings"
+}
