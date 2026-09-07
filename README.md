@@ -24,7 +24,7 @@ Current feature set:
 
 - **Deterministic CLI (`kb`)**: scriptable, offline, provenance-enforced operations with **no LLM calls**.
 - **Document store & citation engine**: raw immutable ingestion, PDF/MD text extraction, and automated citation tracking (`kb doc cite`, `kb doc clean`, `kb doc stubs`).
-- **Embedded property graph (Grafeo) + ISO GQL schema**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
+- **Embedded property graph (TrueSpar Traverse) + ISO GQL schema**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
 - **Cross-cutting terminological layer**: domain-agnostic `Acronym` support with polysemy disambiguation, `USES_ACRONYM` references, and `STANDS_FOR` concept links.
 - **Statically checkable mathematics & algorithms**: SymPy-verified expressions (`.sympy`), Python reference implementations (`.py`), and mathematical derivation tools (`kb math derive`, `kb math glossary`).
 - **Graph quality audit & maintenance**: non-destructive entity deduplication (`kb graph dedupe`) and structural graph linting (`kb graph lint`).
@@ -60,7 +60,7 @@ my-kb/
   schema/
     migrations/           # versioned schema migrations (copy in the seed schema here)
   code/                   # statically checkable snippets referenced by `code_path`
-  graph.grafeo/           # embedded Grafeo database directory (created on first `kb schema apply`)
+  graph.tvdb              # embedded Traverse database file (created on first `kb schema apply`)
 ```
 
 ### The worked example
@@ -319,7 +319,7 @@ Individual checks:
 
 Optional extras:
 
-- `graph` (grafeo)
+- `graph` (traverse-embedded)
 - `embed` (fastembed)
 - `math` (sympy)
 - `pdf` (pypdf)

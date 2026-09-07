@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ..config import KBConfig
-from ..graph.connection import GrafeoNotInstalled, GraphDB
+from ..graph.connection import GraphDB, TraverseNotInstalled
 from ..math.rendering import latex_to_unicode, render_sympy_2d, symbol_name_to_unicode
 
 math_app = typer.Typer(
@@ -56,7 +56,7 @@ def _load_config(kb_root: Path, json_output: bool) -> KBConfig:
 def _open_db(kb_root: Path, config: KBConfig, json_output: bool) -> GraphDB:
     try:
         return GraphDB(kb_root / config.paths.graph_db)
-    except GrafeoNotInstalled as exc:
+    except TraverseNotInstalled as exc:
         _fail(str(exc), json_output)
         raise AssertionError  # unreachable
 

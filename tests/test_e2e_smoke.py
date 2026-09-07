@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-pytest.importorskip("grafeo")
+pytest.importorskip("traverse")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_SCRIPT = REPO_ROOT / "examples" / "factor-graph-slam" / "build_example.sh"

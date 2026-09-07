@@ -30,7 +30,7 @@ from kb.graph.connection import open_graph
 
 runner = CliRunner()
 
-pytest.importorskip("grafeo")
+pytest.importorskip("traverse")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SEED_MIGRATION = REPO_ROOT / "schema" / "migrations" / "0001_seed_domain.gql"

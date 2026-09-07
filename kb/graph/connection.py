@@ -32,10 +32,6 @@ class TraverseNotInstalled(GraphEngineNotInstalled):
     """Raised when traverse-embedded is required but not importable."""
 
 
-# Backward compatibility alias
-GrafeoNotInstalled = TraverseNotInstalled
-
-
 def _require_graph_engine() -> str:
     """Check for available graph engine and return 'traverse'."""
     if traverse is not None:

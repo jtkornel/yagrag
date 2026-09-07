@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 from kb.cli.main import app
 from kb.math.rendering import latex_to_unicode, render_sympy_2d, symbol_name_to_unicode
 
-pytest.importorskip("grafeo")
+pytest.importorskip("traverse")
 
 runner = CliRunner()
 REPO_ROOT = Path(__file__).resolve().parents[1]

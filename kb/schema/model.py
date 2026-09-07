@@ -169,11 +169,11 @@ class RelationType(BaseModel):
         return ordered
 
 
-# --- Grafeo / GQL DDL rendering ----------------------------------------------
+# --- GQL DDL rendering -------------------------------------------------------
 
 
-def grafeo_property_type(t: str) -> str:
-    """Map internal scalar/list types to Grafeo property types."""
+def gql_property_type(t: str) -> str:
+    """Map internal scalar/list types to GQL property types."""
     t = t.strip()
     if t.endswith("[]"):
         return "LIST"
@@ -185,23 +185,23 @@ def grafeo_property_type(t: str) -> str:
     return type_map.get(t.upper(), t)
 
 
-def render_create_node_type_grafeo(nt: NodeType) -> str:
-    """Render a Grafeo `CREATE NODE TYPE` statement."""
+def render_create_node_type(nt: NodeType) -> str:
+    """Render a `CREATE NODE TYPE` statement."""
     props = nt.effective_properties()
-    cols = ", ".join(f"{p.name} {grafeo_property_type(p.type)}" for p in props)
+    cols = ", ".join(f"{p.name} {gql_property_type(p.type)}" for p in props)
     return f"CREATE NODE TYPE {nt.name} ({cols})"
 
 
-def render_create_edge_type_grafeo(rt: RelationType) -> str:
-    """Render a Grafeo `CREATE EDGE TYPE` statement."""
+def render_create_edge_type(rt: RelationType) -> str:
+    """Render a `CREATE EDGE TYPE` statement."""
     props = rt.effective_properties()
-    cols = ", ".join(f"{p.name} {grafeo_property_type(p.type)}" for p in props)
+    cols = ", ".join(f"{p.name} {gql_property_type(p.type)}" for p in props)
     return f"CREATE EDGE TYPE {rt.name} ({cols})"
 
 
 # Backward-compatibility aliases
-render_create_node_table = render_create_node_type_grafeo
-render_create_rel_table = render_create_edge_type_grafeo
+render_create_node_table = render_create_node_type
+render_create_rel_table = render_create_edge_type
 
 
 # --- GQL (ISO/IEC 39075) DDL rendering ---------------------------------------

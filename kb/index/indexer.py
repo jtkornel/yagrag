@@ -75,7 +75,7 @@ class IndexStats:
 
 
 def _load_extensions(g: GraphDB) -> None:
-    """Grafeo provides native vector and full-text search without dynamic extension loading."""
+    """Traverse provides native vector and full-text search without dynamic extension loading."""
 
 
 def _drop_existing(g: GraphDB) -> None:

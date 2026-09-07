@@ -9,7 +9,7 @@ import pytest
 from kb.schema.companion import CompanionError, load_companion
 from kb.schema.migrations import build_target_schema
 
-pytest.importorskip("grafeo")
+pytest.importorskip("traverse")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATIONS_DIR = REPO_ROOT / "schema" / "migrations"

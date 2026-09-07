@@ -1,4 +1,4 @@
-"""Tests for the Grafeo graph layer and versioned GQL schema management.
+"""Tests for the Traverse graph layer and versioned GQL schema management.
 
 Covers: DDL rendering, migration loading, apply/validate round-trip via the
 CLI, a reified Claim write/read, and a follow-up migration adding a new
@@ -30,14 +30,14 @@ from kb.schema.model import (
     RelationType,
     RelPair,
     Schema,
-    render_create_edge_type_grafeo,
-    render_create_node_type_grafeo,
+    render_create_edge_type,
+    render_create_node_type,
     render_gql_graph_type,
 )
 
 runner = CliRunner()
 
-pytest.importorskip("grafeo")
+pytest.importorskip("traverse")
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -73,7 +73,7 @@ def _write_gql_migration(kb: Path, mid: str, gql_text: str) -> Path:
 
 
 def test_render_node_table_injects_common_properties() -> None:
-    ddl = render_create_node_type_grafeo(NodeType(name="Concept"))
+    ddl = render_create_node_type(NodeType(name="Concept"))
     assert ddl.startswith("CREATE NODE TYPE Concept (")
     for col in ("id STRING", "origin STRING", "sources LIST", "confidence FLOAT64"):
         assert col in ddl
@@ -81,7 +81,7 @@ def test_render_node_table_injects_common_properties() -> None:
 
 def test_render_rel_table_properties() -> None:
     rt = RelationType(name="MENTIONS")
-    ddl = render_create_edge_type_grafeo(rt)
+    ddl = render_create_edge_type(rt)
     assert ddl.startswith("CREATE EDGE TYPE MENTIONS (")
     assert "origin STRING" in ddl
     assert "sources LIST" in ddl
@@ -195,7 +195,7 @@ def test_schema_migrate_scaffolds_file(kb_dir: Path) -> None:
 def test_claim_write_read_and_domain_migration(kb_dir: Path) -> None:
     _write_gql_migration(kb_dir, "0001_init", INIT_GQL)
     mdir = kb_dir / "schema" / "migrations"
-    db_path = kb_dir / "graph.grafeo"
+    db_path = kb_dir / "graph.tvdb"
 
     with GraphDB(db_path) as g:
         apply_migrations(g, mdir)
@@ -247,7 +247,7 @@ def test_raw_cypher_migration(kb_dir: Path) -> None:
         "CREATE NODE TYPE Sensor(id STRING, name STRING);\n",
         encoding="utf-8",
     )
-    with GraphDB(kb_dir / "graph.grafeo") as g:
+    with GraphDB(kb_dir / "graph.tvdb") as g:
         newly = apply_migrations(g, mdir)
         assert newly == ["0001_raw"]
         assert "Sensor" in g.node_table_names()

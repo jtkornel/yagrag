@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..config import KBConfig
-from ..graph.connection import GrafeoNotInstalled, GraphDB
+from ..graph.connection import GraphDB, TraverseNotInstalled
 from ..graph.upsert import (
     GraphWriteError,
     ProvenanceError,
@@ -58,7 +58,7 @@ def _open_db(kb: Path, json_output: bool) -> GraphDB:
     try:
         config = KBConfig.load(kb)
         return GraphDB(kb / config.paths.graph_db)
-    except (FileNotFoundError, GrafeoNotInstalled) as exc:
+    except (FileNotFoundError, TraverseNotInstalled) as exc:
         _fail(str(exc), json_output)
         raise AssertionError  # unreachable
 

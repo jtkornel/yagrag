@@ -11,12 +11,11 @@ dependencies = [
     "rich>=13.7.0",
     "pydantic>=2.6.0",
     "tomli>=2.0.1; python_version < '3.11'",
-    "grafeo>=0.5.42",
     "traverse-embedded>=0.8.2",
 ]
 
 [project.optional-dependencies]
-graph = ["traverse-embedded>=0.8.2", "grafeo>=0.5.42"]
+graph = ["traverse-embedded>=0.8.2"]
 embed = ["fastembed>=0.3.0"]
 pdf = ["pypdf>=4.0.0"]
 math = ["sympy>=1.12"]

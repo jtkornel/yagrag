@@ -1,9 +1,9 @@
-"""Embedded graph database connection wrapper (Grafeo) and Cypher execution helpers."""
+"""Embedded graph database connection wrapper (Traverse) and Cypher execution helpers."""
 
 from .connection import (
-    GrafeoNotInstalled,
     GraphDB,
     GraphEngineNotInstalled,
+    TraverseNotInstalled,
     open_graph,
 )
 from .upsert import (
@@ -16,11 +16,11 @@ from .upsert import (
 )
 
 __all__ = [
-    "GrafeoNotInstalled",
     "GraphDB",
     "GraphEngineNotInstalled",
     "GraphWriteError",
     "ProvenanceError",
+    "TraverseNotInstalled",
     "execute_batch",
     "open_graph",
     "upsert_claim",
