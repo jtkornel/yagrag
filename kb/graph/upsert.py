@@ -11,9 +11,33 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..schema.companion import SchemaCompanion, load_companion
 from .connection import GraphDB
 
-VALID_ORIGINS = ("raw", "synthesized", "inferred")
+VALID_ORIGINS = ("raw", "synthesized", "inferred", "mardi")
+
+_COMPANION_CACHE: dict[str, SchemaCompanion | None] = {}
+
+
+def _get_companion(g: GraphDB) -> SchemaCompanion | None:
+    cache_key = str(g.db_path)
+    if cache_key in _COMPANION_CACHE:
+        return _COMPANION_CACHE[cache_key]
+
+    p = g.db_path.parent / "schema" / "schema_companion.json"
+    if p.is_file():
+        comp = load_companion(p)
+        _COMPANION_CACHE[cache_key] = comp
+        return comp
+
+    repo_p = g.db_path.parent.parent / "schema" / "schema_companion.json"
+    if repo_p.is_file():
+        comp = load_companion(repo_p)
+        _COMPANION_CACHE[cache_key] = comp
+        return comp
+
+    _COMPANION_CACHE[cache_key] = None
+    return None
 
 
 class ProvenanceError(ValueError):
@@ -117,6 +141,22 @@ def upsert_edge(
             raise GraphWriteError(
                 f"{side}-node not found: {label} with id {node_id!r}"
             )
+
+    # Validate domain and range against schema companion if declared
+    comp = _get_companion(g)
+    if comp is not None:
+        sem = comp.canonical_edge(rel) or comp.edge(rel)
+        if sem is not None:
+            if sem.domain and from_label not in sem.domain:
+                raise GraphWriteError(
+                    f"invalid domain for edge '{rel}': source node has label '{from_label}', "
+                    f"expected one of: {', '.join(sem.domain)}"
+                )
+            if sem.range and to_label not in sem.range:
+                raise GraphWriteError(
+                    f"invalid range for edge '{rel}': target node has label '{to_label}', "
+                    f"expected one of: {', '.join(sem.range)}"
+                )
 
     set_clause, params = _set_clause("r", props)
     params["from_id"] = from_id
