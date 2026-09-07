@@ -53,83 +53,91 @@ def _extract_node_props(node: Any) -> dict[str, Any]:
 
 
 def _vector_hits(g: GraphDB, vector: list[float], limit: int) -> list[dict[str, Any]]:
-    if g._db is not None:
-        with contextlib.suppress(Exception):
-            results = g._db.vector_search(CHUNK_TABLE, "embedding", vector, k=limit)
-            hits = []
-            for node_id, dist in results:
-                node = g._db.get_node(node_id)
-                props = _extract_node_props(node)
-                hits.append({
-                    "chunk_id": props.get("id"),
-                    "kind": props.get("kind"),
-                    "ref": props.get("ref"),
-                    "label": props.get("label"),
-                    "text": props.get("text"),
-                    "score": float(dist),
-                })
-            if hits:
-                return hits
-        with contextlib.suppress(Exception):
-            rows = g.execute(
-                f"MATCH (node:{CHUNK_TABLE}) "
-                "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
-                "node.label AS label, node.text AS text "
-                "LIMIT $k",
-                {"k": limit},
-            )
-            return [
-                {
-                    "chunk_id": r.get("id"),
-                    "kind": r.get("kind"),
-                    "ref": r.get("ref"),
-                    "label": r.get("label"),
-                    "text": r.get("text"),
-                    "score": 1.0,
-                }
-                for r in rows
-            ]
+    hits = []
+    with contextlib.suppress(Exception):
+        rows = g.execute(
+            f"CALL db.index.vector.queryNodes('chunk_vec', {limit}, $vec) "
+            "YIELD node, score "
+            "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+            "node.label AS label, node.text AS text, score",
+            {"vec": vector},
+        )
+        for r in rows:
+            hits.append({
+                "chunk_id": r.get("id"),
+                "kind": r.get("kind"),
+                "ref": r.get("ref"),
+                "label": r.get("label"),
+                "text": r.get("text"),
+                "score": float(r.get("score") or 0.0),
+            })
+    if hits:
+        return hits
+
+    with contextlib.suppress(Exception):
+        rows = g.execute(
+            f"MATCH (node:{CHUNK_TABLE}) "
+            "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+            "node.label AS label, node.text AS text "
+            "LIMIT $k",
+            {"k": limit},
+        )
+        return [
+            {
+                "chunk_id": r.get("id"),
+                "kind": r.get("kind"),
+                "ref": r.get("ref"),
+                "label": r.get("label"),
+                "text": r.get("text"),
+                "score": 1.0,
+            }
+            for r in rows
+        ]
     return []
 
 
 def _fts_hits(g: GraphDB, query: str, limit: int) -> list[dict[str, Any]]:
-    if g._db is not None:
-        with contextlib.suppress(Exception):
-            results = g._db.text_search(CHUNK_TABLE, "text", query, k=limit)
-            hits = []
-            for node_id, score in results:
-                node = g._db.get_node(node_id)
-                props = _extract_node_props(node)
-                hits.append({
-                    "chunk_id": props.get("id"),
-                    "kind": props.get("kind"),
-                    "ref": props.get("ref"),
-                    "label": props.get("label"),
-                    "text": props.get("text"),
-                    "score": float(score),
-                })
-            if hits:
-                return hits
-        with contextlib.suppress(Exception):
-            rows = g.execute(
-                f"MATCH (node:{CHUNK_TABLE}) "
-                "WHERE node.text CONTAINS $q "
-                "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
-                "node.label AS label, node.text AS text "
-                "LIMIT $k",
-                {"q": query, "k": limit},
-            )
-            return [
-                {
-                    "chunk_id": r.get("id"),
-                    "kind": r.get("kind"),
-                    "ref": r.get("ref"),
-                    "label": r.get("label"),
-                    "text": r.get("text"),
-                    "score": 1.0,
-                }
-                for r in rows
-            ]
+    hits = []
+    with contextlib.suppress(Exception):
+        rows = g.execute(
+            f"CALL db.index.fulltext.queryNodes('chunk_text', $q) "
+            "YIELD node, score "
+            f"RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+            f"node.label AS label, node.text AS text, score LIMIT {limit}",
+            {"q": query},
+        )
+        for r in rows:
+            hits.append({
+                "chunk_id": r.get("id"),
+                "kind": r.get("kind"),
+                "ref": r.get("ref"),
+                "label": r.get("label"),
+                "text": r.get("text"),
+                "score": float(r.get("score") or 0.0),
+            })
+    if hits:
+        return hits
+
+    with contextlib.suppress(Exception):
+        rows = g.execute(
+            f"MATCH (node:{CHUNK_TABLE}) "
+            "WHERE node.text CONTAINS $q "
+            "RETURN node.id AS id, node.kind AS kind, node.ref AS ref, "
+            "node.label AS label, node.text AS text "
+            "LIMIT $k",
+            {"q": query, "k": limit},
+        )
+        return [
+            {
+                "chunk_id": r.get("id"),
+                "kind": r.get("kind"),
+                "ref": r.get("ref"),
+                "label": r.get("label"),
+                "text": r.get("text"),
+                "score": 1.0,
+            }
+            for r in rows
+        ]
     return []
 
 

@@ -168,8 +168,10 @@ def _find_target_nodes(g: GraphDB, target: str) -> list[dict[str, Any]]:
 
     for table in node_tables:
         for sym_var in sym_variants:
-            safe_sym = sym_var.replace("'", "\\'")
-            rows = g.execute(f"MATCH (n:{table} {{symbol: '{safe_sym}'}}) RETURN n")
+            rows = g.execute(
+                f"MATCH (n:{table}) WHERE n.symbol = $sym RETURN n",
+                {"sym": sym_var},
+            )
             for r in rows:
                 n_val = r.get("n", r)
                 add_match(table, _clean_prop_dict(n_val))
@@ -179,7 +181,10 @@ def _find_target_nodes(g: GraphDB, target: str) -> list[dict[str, Any]]:
 
     # 4. Search by case-insensitive name
     for table in node_tables:
-        rows = g.execute(f"MATCH (n:{table}) WHERE toLower(n.name) = toLower('{safe_target}') RETURN n")
+        rows = g.execute(
+            f"MATCH (n:{table}) WHERE toLower(n.name) = toLower($name) RETURN n",
+            {"name": target_clean},
+        )
         for r in rows:
             n_val = r.get("n", r)
             add_match(table, _clean_prop_dict(n_val))

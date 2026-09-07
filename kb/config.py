@@ -26,7 +26,7 @@ class PathsConfig(BaseModel):
     synthesized: str = "documents/synthesized"
     manifest: str = "documents/manifest.json"
     schema_dir: str = Field(default="schema", alias="schema")
-    graph_db: str = "graph.grafeo"
+    graph_db: str = "graph.tvdb"
     code: str = "code"
 
 

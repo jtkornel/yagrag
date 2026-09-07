@@ -47,7 +47,7 @@ def test_init_creates_full_layout(tmp_path: Path) -> None:
     config = KBConfig.load(kb_root)
     assert config.name == "my-kb"
     assert config.paths.raw == "documents/raw"
-    assert config.paths.graph_db == "graph.grafeo"
+    assert config.paths.graph_db == "graph.tvdb"
 
     # Graph DB is intentionally NOT created at init time; the graph
     # layer materializes it when the schema is first applied (Step 2).

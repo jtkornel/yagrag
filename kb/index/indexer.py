@@ -81,12 +81,10 @@ def _load_extensions(g: GraphDB) -> None:
 def _drop_existing(g: GraphDB) -> None:
     with contextlib.suppress(Exception):
         g.execute(f"MATCH (c:{CHUNK_TABLE}) DETACH DELETE c")
-    if hasattr(g._db, "drop_vector_index"):
-        with contextlib.suppress(Exception):
-            g._db.drop_vector_index(CHUNK_TABLE, "embedding")
-    if hasattr(g._db, "drop_text_index"):
-        with contextlib.suppress(Exception):
-            g._db.drop_text_index(CHUNK_TABLE, "text")
+    with contextlib.suppress(Exception):
+        g.execute("DROP INDEX chunk_vec IF EXISTS")
+    with contextlib.suppress(Exception):
+        g.execute("DROP INDEX chunk_text IF EXISTS")
 
 
 def _entity_rows(g: GraphDB) -> list[dict[str, Any]]:
@@ -154,10 +152,6 @@ def build_index(kb_root: Path, config: KBConfig | None = None) -> IndexStats:
 
         if chunks:
             vectors = embedder.embed([c["text"] for c in chunks])
-            with contextlib.suppress(Exception):
-                g._db.create_vector_index(
-                    CHUNK_TABLE, "embedding", dimensions=embedder.dim, metric="cosine"
-                )
             chunk_items = []
             for chunk, vec in zip(chunks, vectors, strict=False):
                 chunk_items.append({
@@ -165,13 +159,20 @@ def build_index(kb_root: Path, config: KBConfig | None = None) -> IndexStats:
                     "embedding": vec,
                     "embedder": f"{embedder.backend}/{embedder.model}",
                 })
-            try:
-                g._db.batch_create_nodes_with_props(CHUNK_TABLE, chunk_items)
-            except Exception:  # noqa: BLE001
-                for item in chunk_items:
-                    g._db.create_node([CHUNK_TABLE], item)
+
+            for item in chunk_items:
+                g.execute(f"CREATE (c:{CHUNK_TABLE}) SET c = $props", {"props": item})
+
             with contextlib.suppress(Exception):
-                g._db.create_text_index(CHUNK_TABLE, "text")
+                g.execute(f"""
+                CREATE VECTOR INDEX chunk_vec FOR (c:{CHUNK_TABLE}) ON c.embedding
+                OPTIONS {{ indexConfig: {{
+                  'vector.dimensions': {embedder.dim},
+                  'vector.similarity_function': 'cosine'
+                }}}}
+                """)
+            with contextlib.suppress(Exception):
+                g.execute(f"CREATE FULLTEXT INDEX chunk_text FOR (c:{CHUNK_TABLE}) ON EACH [c.text]")
 
     return IndexStats(
         documents=len(records),

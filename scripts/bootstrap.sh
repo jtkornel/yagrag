@@ -55,6 +55,12 @@ echo "==> installing project (editable, all extras)"
 VIRTUAL_ENV="$VENV" uv pip install --python "$VENV/bin/python" \
     -e "$REPO_ROOT[graph,embed,pdf,math,dev]"
 
+# --- 4. traverse-server binary ----------------------------------------------
+if [ -x "$REPO_ROOT/scripts/install_traverse_server.sh" ]; then
+    "$REPO_ROOT/scripts/install_traverse_server.sh" "$VENV/bin"
+fi
+
 echo
 echo "Done. Activate with:  source .venv/bin/activate"
 echo "Run tests with:       .venv/bin/python -m pytest -q"
+echo "Run Studio with:      traverse-server --data ./kb-data"

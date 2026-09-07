@@ -1,14 +1,14 @@
-"""Thin wrapper around Grafeo embedded graph database.
+"""Thin wrapper around TrueSpar Traverse embedded graph database.
 
 The wrapper provides a unified interface: it opens an embedded graph database
-at a directory, exposes `execute()` returning row dicts, and provides helpers
-to introspect labels, edges, and schema.
+at a .tvdb file, exposes `execute()` returning row dicts (supporting ISO GQL and
+Cypher), and provides helpers to introspect labels, edges, and schema.
 """
 
 from __future__ import annotations
 
 import contextlib
-import warnings
+import datetime
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
@@ -17,33 +17,37 @@ from typing import Any, Self
 from ..config import KBConfig
 
 try:
-    import grafeo  # type: ignore[import-not-found]
-    grafeo_import_error: Exception | None = None
+    import traverse  # type: ignore[import-not-found]
+    traverse_import_error: Exception | None = None
 except ImportError as exc:
-    grafeo = None  # type: ignore[assignment]
-    grafeo_import_error = exc
+    traverse = None  # type: ignore[assignment]
+    traverse_import_error = exc
 
 
 class GraphEngineNotInstalled(RuntimeError):
-    """Raised when Grafeo graph engine is not installed."""
+    """Raised when Traverse graph engine is not installed."""
 
 
-class GrafeoNotInstalled(GraphEngineNotInstalled):
-    """Raised when grafeo is required but not importable."""
+class TraverseNotInstalled(GraphEngineNotInstalled):
+    """Raised when traverse-embedded is required but not importable."""
+
+
+# Backward compatibility alias
+GrafeoNotInstalled = TraverseNotInstalled
 
 
 def _require_graph_engine() -> str:
-    """Check for available graph engine and return 'grafeo'."""
-    if grafeo is not None:
-        return "grafeo"
-    raise GrafeoNotInstalled(
-        "Grafeo graph database engine is not installed; install with `pip install grafeo` "
-        "or `pip install .[graph]`"
-    ) from grafeo_import_error
+    """Check for available graph engine and return 'traverse'."""
+    if traverse is not None:
+        return "traverse"
+    raise TraverseNotInstalled(
+        "TrueSpar Traverse graph database engine is not installed; install with "
+        "`pip install traverse-embedded` or `pip install .[graph]`"
+    ) from traverse_import_error
 
 
 def _resolve_db_path(db_path: Path | str) -> Path:
-    """Resolve a path to the actual DB directory/file.
+    """Resolve a path to the actual DB file.
 
     If given a KB root directory containing `kb.toml`, reads the configured
     `graph_db` path; otherwise treats `db_path` directly as the DB path.
@@ -61,34 +65,57 @@ def _extract_name(item: Any) -> str:
     if isinstance(item, str):
         return item
     if isinstance(item, dict):
-        val = item.get("name") or item.get("label") or item.get("type") or item.get("id") or ""
+        val = item.get("name") or item.get("label") or item.get("type") or item.get("id") or item.get("relationshipType") or ""
         return str(val) if val else ""
     if hasattr(item, "name"):
         return str(item.name)
     return str(item) if item is not None else ""
 
 
-class GraphDB:
-    """A handle to an embedded Grafeo graph database.
+def _sanitize_val(v: Any) -> Any:
+    if isinstance(v, (datetime.datetime, datetime.date)):
+        return v.isoformat()
+    if isinstance(v, list):
+        return [_sanitize_val(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _sanitize_val(val) for k, val in v.items()}
+    return v
 
-    Instances manage lifecycle, query execution, and schema introspection.
+
+def _sanitize_params(params: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not params:
+        return params
+    return {k: _sanitize_val(v) for k, v in params.items()}
+
+
+class GraphDB:
+    """A handle to an embedded TrueSpar Traverse graph database.
+
+    Instances manage lifecycle, query execution (GQL/Cypher), and schema introspection.
     """
 
-    engine: str = "grafeo"
+    engine: str = "traverse"
     db_path: Path
     _db: Any
 
     def __init__(self, db_path: Path | str):
         _require_graph_engine()
-        assert grafeo is not None
-        self.engine = "grafeo"
+        assert traverse is not None
+        self.engine = "traverse"
         self.db_path = _resolve_db_path(db_path)
-        self._db = grafeo.GrafeoDB(str(self.db_path))
+        self._db = traverse.open(str(self.db_path))
 
     # --- lifecycle -----------------------------------------------------------
 
+    def flush(self) -> None:
+        """Flush in-memory database state to the .tvdb file."""
+        if self._db is not None and hasattr(self._db, "flush"):
+            self._db.flush()
+
     def close(self) -> None:
         if self._db is not None:
+            with contextlib.suppress(Exception):
+                self._db.flush()
             if hasattr(self._db, "close"):
                 self._db.close()
             self._db = None
@@ -102,32 +129,38 @@ class GraphDB:
     # --- query ---------------------------------------------------------------
 
     def execute(
-        self, cypher: str, parameters: dict[str, Any] | None = None
+        self,
+        query: str,
+        parameters: dict[str, Any] | None = None,
+        dialect: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Execute a Cypher/GQL query and return rows as a list of dicts."""
+        """Execute a GQL or Cypher query and return rows as a list of dicts.
+
+        By default, queries attempt execution using the ISO GQL dialect
+        (`dialect="gql"`), and automatically fall back to standard Cypher for
+        Cypher-specific statements (e.g. `MERGE`, schema constraints, `SHOW`).
+        """
         if self._db is None:
             return []
-        if parameters:
-            result = self._db.execute(cypher, parameters)
-        else:
-            result = self._db.execute(cypher)
-        if hasattr(result, "to_dict_list"):
-            return result.to_dict_list()
-        rows: list[dict[str, Any]] = []
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                category=DeprecationWarning,
-                message=r".*utcfromtimestamp.*",
-            )
-            for r in result:
-                if isinstance(r, dict):
-                    rows.append(r)
-                elif hasattr(r, "to_dict"):
-                    rows.append(r.to_dict())
-                else:
-                    rows.append(dict(r))
-        return rows
+
+        clean_params = _sanitize_params(parameters) or {}
+        with self._db.begin() as tx:
+            # If user explicitly requested a dialect, use it
+            if dialect:
+                res = tx.execute(query, clean_params, dialect=dialect)
+                tx.commit()
+                self._db.flush()
+                return res.data() if hasattr(res, "data") else []
+
+            # GQL-first: try GQL dialect, fallback to default Cypher if GQL rejects syntax
+            try:
+                res = tx.execute(query, clean_params, dialect="gql")
+            except Exception:
+                res = tx.execute(query, clean_params)
+
+            tx.commit()
+            self._db.flush()
+            return res.data() if hasattr(res, "data") else []
 
     def execute_raw(self, statements: str) -> None:
         """Execute one or more `;`-separated statements, discarding results."""
@@ -135,7 +168,7 @@ class GraphDB:
             for stmt in statements.split(";"):
                 stmt = stmt.strip()
                 if stmt:
-                    self._db.execute(stmt)
+                    self.execute(stmt)
 
     # --- introspection -------------------------------------------------------
 
@@ -153,10 +186,19 @@ class GraphDB:
             return []
         all_lbls: set[str] = set()
         with contextlib.suppress(Exception):
-            for r in self.execute("SHOW NODE TYPES"):
-                name = _extract_name(r.get("name") or r.get("label") or r)
+            rows = self.execute("CALL db.labels()")
+            for r in rows:
+                name = _extract_name(r)
                 if name:
                     all_lbls.add(name)
+        # Also check schema constraints for declared labels with 0 nodes yet
+        with contextlib.suppress(Exception):
+            rows = self.execute("SHOW CONSTRAINTS")
+            for r in rows:
+                if str(r.get("entityType", "")).upper() == "NODE":
+                    lbl = str(r.get("labelsOrTypes", "")).strip()
+                    if lbl:
+                        all_lbls.add(lbl)
         return sorted(all_lbls)
 
     def rel_table_names(self) -> list[str]:
@@ -164,46 +206,65 @@ class GraphDB:
             return []
         all_edges: set[str] = set()
         with contextlib.suppress(Exception):
-            for r in self.execute("SHOW EDGE TYPES"):
-                name = _extract_name(r.get("name") or r.get("label") or r)
+            rows = self.execute("CALL db.relationshipTypes()")
+            for r in rows:
+                name = _extract_name(r)
                 if name:
                     all_edges.add(name)
+        with contextlib.suppress(Exception):
+            rows = self.execute("SHOW CONSTRAINTS")
+            for r in rows:
+                if str(r.get("entityType", "")).upper() == "RELATIONSHIP":
+                    rt = str(r.get("labelsOrTypes", "")).strip()
+                    if rt:
+                        all_edges.add(rt)
+        with contextlib.suppress(Exception):
+            rows = self.execute("SHOW INDEXES")
+            for r in rows:
+                if str(r.get("entityType", "")).upper() == "RELATIONSHIP":
+                    rt = str(r.get("labelsOrTypes", "")).strip()
+                    if rt:
+                        all_edges.add(rt)
         return sorted(all_edges)
 
     def table_info(self, name: str) -> list[dict[str, Any]]:
-        """Return per-property info for a table."""
+        """Return per-property info for a label or relationship type."""
         if self._db is None:
             return []
-        target_name = name.strip().lower()
-        with contextlib.suppress(Exception):
-            for nt in self.execute("SHOW NODE TYPES"):
-                if str(nt.get("name", "")).strip().lower() == target_name:
-                    props_str = nt.get("properties", "")
-                    cols: list[dict[str, Any]] = []
-                    if props_str:
-                        for part in props_str.split(","):
-                            part = part.strip()
-                            if part:
-                                pieces = part.split(None, 1)
-                                col_name = pieces[0]
-                                col_type = pieces[1] if len(pieces) > 1 else "ANY"
-                                cols.append({"name": col_name, "type": col_type})
-                    return cols
+        target_name = name.strip()
 
+        # 1. Check migrations schema if available
+        mig_dir = self.db_path.parent / "schema" / "migrations"
+        if not mig_dir.is_dir():
+            mig_dir = self.db_path.parent.parent / "schema" / "migrations"
+        if mig_dir.is_dir():
+            with contextlib.suppress(Exception):
+                from ..schema.migrations import build_target_schema
+                target = build_target_schema(mig_dir)
+                for nt in target.node_types:
+                    if nt.name.lower() == target_name.lower():
+                        return [{"name": p.name, "type": p.type} for p in nt.properties]
+                for rt in target.relation_types:
+                    if rt.name.lower() == target_name.lower():
+                        return [{"name": p.name, "type": p.type} for p in rt.properties]
+
+        # 2. Try finding a sample node with this label
         with contextlib.suppress(Exception):
-            for et in self.execute("SHOW EDGE TYPES"):
-                if str(et.get("name", "")).strip().lower() == target_name:
-                    props_str = et.get("properties", "")
-                    cols_edge: list[dict[str, Any]] = []
-                    if props_str:
-                        for part in props_str.split(","):
-                            part = part.strip()
-                            if part:
-                                pieces = part.split(None, 1)
-                                col_name = pieces[0]
-                                col_type = pieces[1] if len(pieces) > 1 else "ANY"
-                                cols_edge.append({"name": col_name, "type": col_type})
-                    return cols_edge
+            rows = self.execute(
+                f"MATCH (n:{target_name}) RETURN properties(n) AS props LIMIT 1"
+            )
+            if rows:
+                props = rows[0].get("props", {})
+                return [{"name": k, "type": type(v).__name__.upper()} for k, v in props.items()]
+
+        # 3. Try finding a sample edge with this relation type
+        with contextlib.suppress(Exception):
+            rows = self.execute(
+                f"MATCH ()-[r:{target_name}]->() RETURN properties(r) AS props LIMIT 1"
+            )
+            if rows:
+                props = rows[0].get("props", {})
+                return [{"name": k, "type": type(v).__name__.upper()} for k, v in props.items()]
 
         return []
 
@@ -212,7 +273,7 @@ class GraphDB:
 def open_graph(db_path: Path | str) -> Generator[GraphDB, None, None]:
     """Open a `GraphDB` as a context manager.
 
-    Accepts either a direct path to the DB directory or the KB root
+    Accepts either a direct path to the DB file or the KB root
     directory (containing kb.toml).
     """
     g = GraphDB(db_path)

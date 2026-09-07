@@ -375,6 +375,7 @@ dependencies = [
     { name = "grafeo" },
     { name = "pydantic" },
     { name = "rich" },
+    { name = "traverse-embedded" },
     { name = "typer" },
 ]
 
@@ -389,6 +390,7 @@ embed = [
 ]
 graph = [
     { name = "grafeo" },
+    { name = "traverse-embedded" },
 ]
 math = [
     { name = "sympy" },
@@ -410,6 +412,8 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "sympy", marker = "extra == 'math'", specifier = ">=1.12" },
     { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0.1" },
+    { name = "traverse-embedded", specifier = ">=0.8.2" },
+    { name = "traverse-embedded", marker = "extra == 'graph'", specifier = ">=0.8.2" },
     { name = "typer", specifier = ">=0.12.0" },
 ]
 provides-extras = ["graph", "embed", "pdf", "math", "dev"]
@@ -1094,6 +1098,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/dd/84/da0e5038228fa34dfd77c5026b173ed035d2a3ba31f1077590c013de2bff/tqdm-4.69.1.tar.gz", hash = "sha256:2be21080a0ce17e902c2f1baeb6a74bf551b67bbdfa4bc0109fad471d0b4cb0d", size = 793046, upload-time = "2026-07-24T14:22:02.08Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/50/5817619a0fca56aff06383dbfde7ae017b3ca383915b3f1e4713164273cf/tqdm-4.69.1-py3-none-any.whl", hash = "sha256:0a654b96f7a2660cceb615b56f307ec2bef96c515409014a429a561981ab52b4", size = 675452, upload-time = "2026-07-24T14:22:00.048Z" },
+]
+
+[[package]]
+name = "traverse-embedded"
+version = "0.8.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/37/f1/0af554492fc78bd7d5f6d3681c55df4302cdf5e44ac3ef9b381c82750ce1/traverse_embedded-0.8.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:01b12ca11f01cfc690d5fc0d9a2b161581e257c19ca899523415bacefb67d8d8", size = 7889733, upload-time = "2026-07-10T13:58:25.335Z" },
+    { url = "https://files.pythonhosted.org/packages/81/c6/5b4a963c42fc86262090932e22be7739b773dc5c1a8692f541ba5544e6b8/traverse_embedded-0.8.2-cp310-abi3-win_amd64.whl", hash = "sha256:bbf0a136c5f98ca456abddc2236460a4fc6e9e3c92854463e424d8c4d5ee5aa1", size = 7847497, upload-time = "2026-07-10T13:58:27.01Z" },
 ]
 
 [[package]]

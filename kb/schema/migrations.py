@@ -30,9 +30,17 @@ from .model import (
     NodeType,
     Property,
     RelationType,
+    RelPair,
     Schema,
-    render_create_edge_type_grafeo,
-    render_create_node_type_grafeo,
+)
+
+_CREATE_NODE_RE = re.compile(
+    r"CREATE\s+NODE\s+TYPE\s+([A-Za-z0-9_]+)\s*\((.*?)\)",
+    re.IGNORECASE | re.DOTALL,
+)
+_CREATE_EDGE_RE = re.compile(
+    r"CREATE\s+EDGE\s+TYPE\s+([A-Za-z0-9_]+)(?:\s*\((.*?)\))?",
+    re.IGNORECASE | re.DOTALL,
 )
 
 _MIGRATION_ID_RE = re.compile(r"^\d{4,}_[A-Za-z0-9_\-]+$")
@@ -139,7 +147,8 @@ def _ensure_migrations_table(g: GraphDB) -> None:
     if MIGRATIONS_TABLE not in g.node_table_names():
         with contextlib.suppress(Exception):
             g.execute(
-                f"CREATE NODE TYPE {MIGRATIONS_TABLE} (id STRING, applied_at TIMESTAMP)"
+                f"CREATE CONSTRAINT pk_{MIGRATIONS_TABLE} "
+                f"FOR (m:{MIGRATIONS_TABLE}) REQUIRE m.id IS UNIQUE"
             )
 
 
@@ -158,11 +167,15 @@ def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
     if mf.migration is not None:
         for op in mf.migration.operations:
             if isinstance(op, CreateNodeOp):
+                name = op.table.name
                 with contextlib.suppress(Exception):
-                    g.execute(render_create_node_type_grafeo(op.table))
+                    g.execute(
+                        f"CREATE CONSTRAINT pk_{name.lower()} FOR (n:{name}) REQUIRE n.id IS UNIQUE"
+                    )
             elif isinstance(op, CreateRelOp):
+                name = op.table.name
                 with contextlib.suppress(Exception):
-                    g.execute(render_create_edge_type_grafeo(op.table))
+                    g.execute(f"CREATE EDGE INDEX ON :{name}")
             elif isinstance(op, AddRelPairOp):
                 pass
             elif isinstance(op, CypherOp):
@@ -171,6 +184,20 @@ def _apply_migration(g: GraphDB, mf: MigrationFile) -> None:
     else:
         assert mf.raw_cypher is not None
         for stmt in _split_cypher_statements(mf.raw_cypher):
+            m_node = _CREATE_NODE_RE.search(stmt)
+            if m_node:
+                name = m_node.group(1)
+                with contextlib.suppress(Exception):
+                    g.execute(
+                        f"CREATE CONSTRAINT pk_{name.lower()} FOR (n:{name}) REQUIRE n.id IS UNIQUE"
+                    )
+                continue
+            m_edge = _CREATE_EDGE_RE.search(stmt)
+            if m_edge:
+                name = m_edge.group(1)
+                with contextlib.suppress(Exception):
+                    g.execute(f"CREATE EDGE INDEX ON :{name}")
+                continue
             with contextlib.suppress(Exception):
                 g.execute(stmt)
 
@@ -214,52 +241,39 @@ def _parse_properties_str(props_str: str) -> list[Property]:
 
 
 def build_target_schema(migrations_dir: Path) -> Schema:
-    """Fold all migrations into a single target `Schema` using an ephemeral GrafeoDB session."""
-    import grafeo  # type: ignore[import-not-found]
+    """Fold all migrations into a single target `Schema`."""
+    nodes: dict[str, NodeType] = {}
+    edges: dict[str, RelationType] = {}
 
-    db = grafeo.GrafeoDB()
     for mf in load_migrations(migrations_dir):
         if mf.raw_cypher is not None:
             for stmt in _split_cypher_statements(mf.raw_cypher):
-                with contextlib.suppress(Exception):
-                    db.execute(stmt)
+                m_node = _CREATE_NODE_RE.search(stmt)
+                if m_node:
+                    name = m_node.group(1)
+                    if name != MIGRATIONS_TABLE:
+                        props = _parse_properties_str(m_node.group(2))
+                        if not any(p.primary_key for p in props):
+                            props.insert(0, Property(name="id", type="STRING", primary_key=True))
+                        nodes[name] = NodeType(name=name, properties=props, include_common=False)
+                    continue
+                m_edge = _CREATE_EDGE_RE.search(stmt)
+                if m_edge:
+                    name = m_edge.group(1)
+                    props_str = m_edge.group(2) or ""
+                    props = _parse_properties_str(props_str)
+                    edges[name] = RelationType(name=name, properties=props, pairs=[], include_common=False)
         elif mf.migration is not None:
             for op in mf.migration.operations:
                 if isinstance(op, CreateNodeOp):
-                    with contextlib.suppress(Exception):
-                        db.execute(render_create_node_type_grafeo(op.table))
+                    nodes[op.table.name] = op.table
                 elif isinstance(op, CreateRelOp):
-                    with contextlib.suppress(Exception):
-                        db.execute(render_create_edge_type_grafeo(op.table))
+                    edges[op.table.name] = op.table
                 elif isinstance(op, AddRelPairOp):
-                    pass
-                elif isinstance(op, CypherOp):
-                    for stmt in _split_cypher_statements(op.sql):
-                        with contextlib.suppress(Exception):
-                            db.execute(stmt)
+                    if op.table in edges:
+                        edges[op.table].pairs.append(RelPair(**{"from": op.from_, "to": op.to}))
 
-    node_types: list[NodeType] = []
-    for r in db.execute("SHOW NODE TYPES"):
-        name = str(r.get("name", "")).strip()
-        if not name or name == MIGRATIONS_TABLE:
-            continue
-        props_str = str(r.get("properties", "")).strip()
-        props = _parse_properties_str(props_str)
-        # Ensure id primary key if missing
-        if not any(p.primary_key for p in props):
-            props.insert(0, Property(name="id", type="STRING", primary_key=True))
-        node_types.append(NodeType(name=name, properties=props, include_common=False))
-
-    relation_types: list[RelationType] = []
-    for r in db.execute("SHOW EDGE TYPES"):
-        name = str(r.get("name", "")).strip()
-        if not name:
-            continue
-        props_str = str(r.get("properties", "")).strip()
-        props = _parse_properties_str(props_str)
-        relation_types.append(RelationType(name=name, properties=props, pairs=[], include_common=False))
-
-    return Schema(node_types=node_types, relation_types=relation_types)
+    return Schema(node_types=list(nodes.values()), relation_types=list(edges.values()))
 
 
 @dataclass(frozen=True)
