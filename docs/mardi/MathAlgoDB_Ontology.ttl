@@ -1,0 +1,184 @@
+# ontology.ttl
+
+## Namespaces
+
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dc:      <http://purl.org/spar/datacite/> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+
+@prefix :        <https://mardi4nfdi.de/mathalgodb/0.1#> .
+@prefix skos:	<http://www.w3.org/2004/02/skos/core#> .
+
+# for details on added properties https://dgarijo.github.io/Widoco/doc/bestPractices/index-en.html
+# Logo is not used atm
+<https://mardi4nfdi.de/mathalgodb/0.1> a owl:Ontology ;
+    <http://purl.org/vocab/vann/preferredNamespaceUri> "https://mardi4nfdi.de/mathalgodb/0.1#" ;
+    <http://purl.org/vocab/vann/preferredNamespacePrefix> "mathalgodb" ;
+    dcterms:title "Algorithm Knowledge Graph Ontology" ;
+    dcterms:description """This vocabulary and grammar defines which types of objects are admissible to the MathAlgoDB -
+                        the algorithm knowledge graph - and by which properties they can relate. All in all five
+                        classes, "problem", "algorithm", "benchmark", "software", "publication", are defined,
+                        as well as a minimal but intuitively intelligible number of properties. As opposed to the more
+                        liberal WikiData, MathAlgoDB relies on the strict adherence to the ontology to provide a reliable
+                        machine-readable database of (numerical) algorithm knowledge.""";
+    dcterms:creator "Christian Himpe (https://orcid.org/0000-0003-2194-6754)" ,
+                    "René Fritze (https://orcid.org/0000-0002-9548-2238)",
+                    "Hendrik Kleikamp (https://orcid.org/0000-0003-1264-5941)",
+                    "Stephan Rave (https://orcid.org/0000-0003-0439-7212)" ,
+                    "Frank Wübbeling (https://orcid.org/0000-0002-2375-2008)";
+    dcterms:license <https://creativecommons.org/licenses/by/4.0> ;
+    dcterms:bibliographicCitation "MaRDI Task Area 2 - Scientific Computing @ University of Münster. MathAlgoDB - Algorithm Knowledge Graph - Ontology (Version 0.1). MaRDI (Mathematical Research Data Initiative), 2022. https://mardi4nfdi.de/mathalgodb/0.1" ;
+    owl:versionIRI <https://mardi4nfdi.de/mathalgodb/0.1> ;
+    owl:versionInfo "0.1" ;
+    <http://purl.org/ontology/bibo/status> "Draft" ;
+    <http://xmlns.com/foaf/0.1/logo> <https://workshop.mardi.ovh/images/MaRDI_Logo_S_5_rgb.svg> ;
+.
+
+## Classes
+
+# A :problem is an abstract question possibly solvable with mathematical methods (based on https://en.wikipedia.org/wiki/Mathematical_problem)
+:problem a owl:Class ; rdfs:label "Algorithmic Task" ; owl:cardinality "30"^^xsd:nonNegativeInteger ; skos:definition "An engineering challenge that includes a mathematical part" ; rdfs:comment "When interested in algorithms solving a certain problem at hand, we here provide an overview of all problems defined in the graph." .
+
+# An :algorithm is a sequence of operations that provides a solution to a :problem.
+:algorithm a owl:Class ; rdfs:label "Algorithm" ; owl:cardinality "10"^^xsd:nonNegativeInteger ; rdfs:comment "The main building blocks of the graph are algorithms. Here you can take a look at all algorithms documented in the graph." .
+
+
+# A :benchmark is a selected example of a :problem.
+:benchmark a owl:Class ; rdfs:label "Benchmark" ; owl:cardinality "40"^^xsd:nonNegativeInteger ; rdfs:comment "For testing, evaluating and comparing numerical algorithms, so called benchmark problems are often useful." .
+
+# A :software is a practical implementation of an :algorithm.
+:software a owl:Class ; rdfs:label "Software" ; owl:cardinality "20"^^xsd:nonNegativeInteger ; rdfs:comment "This table contains software packages that implement some of the algorithms from the graph." .
+
+
+# A :publication is an available document at a stable location.
+:publication a owl:Class ; rdfs:label "Publication" ; owl:cardinality "100"^^xsd:nonNegativeInteger ; rdfs:comment "To find theoretical or numerical results on the performance of algorithms, take a look at the related publications in this list." .
+
+
+## Properties
+
+# A :problem "P" :specializes a :problem "Q", if "P" is a constraint or special case of a more general "Q".
+#:specializes a owl:ObjectProperty ; rdfs:domain :problem ; rdfs:range :problem ; rdfs:label "specializes|is specialized by" ; owl:cardinality "5"^^xsd:nonNegativeInteger .
+:specializes a owl:TransitiveProperty ; rdfs:domain :problem ; rdfs:range :problem ; rdfs:label "specializes" ; owl:cardinality "5"^^xsd:nonNegativeInteger .
+:specializedBy a owl:TransitiveProperty ; rdfs:domain :problem ; rdfs:range :problem ; rdfs:label "specializedBy" ; owl:cardinality "5"^^xsd:nonNegativeInteger ; owl:inverseOf :specializes.
+
+
+# An :algorithm :solves a :problem.
+#:solves a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :problem ; rdfs:label "solves|is solved by" ; owl:cardinality "10"^^xsd:nonNegativeInteger .
+:solves a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :problem ; rdfs:label "solves" ; owl:cardinality "10"^^xsd:nonNegativeInteger .
+:solvedBy a owl:ObjectProperty ; rdfs:domain :problem ; rdfs:range :algorithm ; rdfs:label "is solved by" ; owl:cardinality "10"^^xsd:nonNegativeInteger ; owl:inverseOf :solves.
+
+# This was a good idea, but makes things too complicated because
+# we have Problem supersolvedBy Problem
+#:specializes rdfs:subPropertyOf :supersolvedBy .
+#:solvedBy rdfs:subPropertyOf :supersolvedBy .
+#:hasSubclass rdfs:subPropertyOf :supersolvedBy .
+#:supersolvedBy a owl:TransitiveProperty .
+#:supersolvedBy rdfs:label "supersolvedBy" .
+#:supersolvedBy owl:cardinality "2000"^^xsd:nonNegativeInteger .
+
+#:subclassOf rdfs:subPropertyOf :supersolves .
+#:solves rdfs:subPropertyOf :supersolves .
+#:specializedBy rdfs:subPropertyOf :supersolves .
+#:supersolves a owl:TransitiveProperty .
+#:supersolves rdfs:label "supersolves" .
+#:supersolves owl:cardinality "2000"^^xsd:nonNegativeInteger .
+
+# This is the correct implementation.
+# However, the JENA inference machine does not suppport OWL 2.
+# When moving to a different implementation, this might work (HERMIT/PELLET)
+# Note: Need to UNION these properties (...subProperty)
+# :supersolves rdf:type rdf:Property .
+# :supersolves owl:propertyChainAxiom (:subclassOf :solves) .
+# :supersolvedBy rdf:type rdf:Property .
+# :supersolvedBy owl:propertyChainAxiom (:solvedBy :hasSubclass) .
+
+
+# An :algorithm "A" can be a :subclassOf an :algorithm "B", if "B" is a simpler version of "A", while "A" uses the essential algorithmic ideas of "B".
+#:subclassOf a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is subclass of|has subclass" ; owl:cardinality "20"^^xsd:nonNegativeInteger .
+:subclassOf a owl:TransitiveProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is subclass of" ; owl:cardinality "20"^^xsd:nonNegativeInteger .
+:hasSubclass a owl:TransitiveProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "has subclass" ; owl:cardinality "20"^^xsd:nonNegativeInteger ; owl:inverseOf :subclassOf .
+
+# An :algorithm "A" :hasComponent :algorithm "B", if "B" is used to complete "A".
+#:hasComponent a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "has component|is component of" ; owl:cardinality "40"^^xsd:nonNegativeInteger .
+:hasComponent a owl:TransitiveProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "has component" ; owl:cardinality "40"^^xsd:nonNegativeInteger .
+:componentOf a owl:TransitiveProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is component of" ; owl:cardinality "40"^^xsd:nonNegativeInteger ; owl:inverseOf :hasComponent .
+
+# An :algorithm "A" can be :relatedTo an :algorithm "B", if "A" and "B" share algorithmic ideas, or properties but are not descendent from each other.
+#:relatedTo a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is related to|is related to" ; owl:cardinality "30"^^xsd:nonNegativeInteger .
+#:relatedTo a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is related to" ; owl:cardinality "30"^^xsd:nonNegativeInteger ; owl:inverseOf :relatedTo .
+:relatedTo a owl:SymmetricProperty ; rdfs:domain :algorithm ; rdfs:range :algorithm ; rdfs:label "is related to" ; owl:cardinality "30"^^xsd:nonNegativeInteger .
+:relatedTo a owl:TransitiveProperty .
+
+# An :algorithm is :inventedIn a :publication; it may occur that multiple :publications invent the same :algorithm.
+#:inventedIn a owl:ObjectProperty ; rdfs:domain :algorithm  ; rdfs:range :publication ; rdfs:label "is invented in|invents" ; owl:cardinality "50"^^xsd:nonNegativeInteger .
+:inventedIn a owl:ObjectProperty ; rdfs:domain :algorithm  ; rdfs:range :publication ; rdfs:label "is invented in" ; owl:cardinality "50"^^xsd:nonNegativeInteger .
+:invents a owl:ObjectProperty ; rdfs:domain :publication  ; rdfs:range :algorithm ; rdfs:label "invents" ; owl:cardinality "50"^^xsd:nonNegativeInteger ; owl:inverseOf :inventedIn .
+
+# An :algorithm is :analyzedIn a :publication; this refers to the theoretical analysis of the :algorithm.
+#:analyzedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is analyzed in|analyzes" ; owl:cardinality "60"^^xsd:nonNegativeInteger .
+:analyzedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is analyzed in" ; owl:cardinality "60"^^xsd:nonNegativeInteger .
+:analyzes a owl:ObjectProperty ; rdfs:domain :publication ; rdfs:range :algorithm ; rdfs:label "analyzes" ; owl:cardinality "60"^^xsd:nonNegativeInteger ; owl:inverseOf :analyzedIn .
+
+# An :algorithm is :studiedIn a :publication; this refers to the numerical testing of the :algorithm.
+#:studiedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is studied in|studies" ; owl:cardinality "70"^^xsd:nonNegativeInteger .
+:studiedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is studied in" ; owl:cardinality "70"^^xsd:nonNegativeInteger .
+:studies a owl:ObjectProperty ; rdfs:domain :publication ; rdfs:range :algorithm ; rdfs:label "studies" ; owl:cardinality "70"^^xsd:nonNegativeInteger ; owl:inverseOf :studiedIn .
+
+# An :algorithm is :appliedIn a :publication; this refers to the practical application of the :algorithm.
+#:appliedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is applied in|applies" ; owl:cardinality "80"^^xsd:nonNegativeInteger .
+:appliedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is applied in" ; owl:cardinality "80"^^xsd:nonNegativeInteger .
+:applies a owl:ObjectProperty ; rdfs:domain :publication ; rdfs:range :algorithm ; rdfs:label "applies" ; owl:cardinality "80"^^xsd:nonNegativeInteger ; owl:inverseOf :appliedIn .
+
+# An :algorithm is :reviewedIn a :publication; this refers to the description of the :algorithm in a survey :publication.
+#:reviewedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is surveyed in|surveys" ; owl:cardinality "90"^^xsd:nonNegativeInteger .
+:reviewedIn a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :publication ; rdfs:label "is surveyed in" ; owl:cardinality "90"^^xsd:nonNegativeInteger .
+:reviews a owl:ObjectProperty ; rdfs:domain :publication ; rdfs:range :algorithm ; rdfs:label "surveys" ; owl:cardinality "90"^^xsd:nonNegativeInteger ; owl:inverseOf :reviewedIn .
+
+
+# A :software :implements an :algorithm.
+#:implements a owl:ObjectProperty ; rdfs:domain :software ; rdfs:range :algorithm ; rdfs:label "implements|is implemented by" ; owl:cardinality "100"^^xsd:nonNegativeInteger .
+:implements a owl:ObjectProperty ; rdfs:domain :software ; rdfs:range :algorithm ; rdfs:label "implements" ; owl:cardinality "100"^^xsd:nonNegativeInteger .
+:implementedBy a owl:ObjectProperty ; rdfs:domain :algorithm ; rdfs:range :software ; rdfs:label "is implemented by" ; owl:cardinality "100"^^xsd:nonNegativeInteger ; owl:inverseOf :implements .
+
+# A :software :tests a :benchmark; this should be verifiable by the benchmark framework (once it is in-use TODO:).
+#:tests a owl:ObjectProperty ; rdfs:domain :software ; rdfs:range :benchmark ; rdfs:label "tests|is tested by" ; owl:cardinality "110"^^xsd:nonNegativeInteger .
+:tests a owl:ObjectProperty ; rdfs:domain :software ; rdfs:range :benchmark ; rdfs:label "tests" ; owl:cardinality "110"^^xsd:nonNegativeInteger .
+:testedBy a owl:ObjectProperty ; rdfs:domain :benchmark ; rdfs:range :software ; rdfs:label "is tested by" ; owl:cardinality "110"^^xsd:nonNegativeInteger ; owl:inverseOf :tests .
+
+
+# A :benchmark is a concrete :instanceOf a :problem.
+#:instanceOf a owl:ObjectProperty ; rdfs:domain :benchmark ; rdfs:range :problem ; rdfs:label "is instance of|instantiates" ; owl:cardinality "100"^^xsd:nonNegativeInteger .
+:instanceOf a owl:ObjectProperty ; rdfs:domain :benchmark ; rdfs:range :problem ; rdfs:label "is instance of" ; owl:cardinality "100"^^xsd:nonNegativeInteger .
+:instantiates a owl:ObjectProperty ; rdfs:domain :problem ; rdfs:range :benchmark ; rdfs:label "instantiates" ; owl:cardinality "100"^^xsd:nonNegativeInteger ; owl:inverseOf :instanceOf .
+
+# The following clauses act on unions.
+:all_objects rdf:type owl:Class ;
+    owl:unionOf (:benchmark :software :publication :algorithm :problem) ;
+    rdfs:label "All allgodata objects" .
+:identifiable rdf:type owl:Class ;
+    owl:unionOf (:benchmark :software :publication) ; rdfs:label "Identifiable".
+:realization rdf:type owl:Class ;
+    skos:definition """
+    Union of all MathAlgoDB-Classes that *may* have a unique identifier.
+    """;
+    owl:unionOf (:benchmark :software) ; rdfs:label "Realization".
+
+# A :software or :benchmark is :documentedIn a :publication; this refers to description of the :software or :benchmark in a :publication.
+#:documentedIn a owl:ObjectProperty ; rdfs:domain :realization ; rdfs:range :publication ; rdfs:label "is documented in|documents" ; owl:cardinality "120"^^xsd:nonNegativeInteger .
+:documentedIn a owl:ObjectProperty ; rdfs:domain :realization ; rdfs:range :publication ; rdfs:label "is documented in" ; owl:cardinality "120"^^xsd:nonNegativeInteger .
+:documents a owl:ObjectProperty ; rdfs:domain :publication ; rdfs:range :realization ; rdfs:label "documents" ; owl:cardinality "120"^^xsd:nonNegativeInteger ; owl:inverseOf :documentedIn .
+
+# A :software or :benchmark is :usedIn a :publication; this refers to the utilization of the :software or :benchmark for computer-based experiments in a :publication.
+:usedIn a owl:ObjectProperty ; rdfs:domain :realization ; rdfs:range :publication ; rdfs:label "is used in" ; owl:cardinality "130"^^xsd:nonNegativeInteger .
+:uses a owl:ObjectProperty; rdfs:label "uses"; owl:inverseOf :usedIn; rdfs:range :realization; rdfs:domain :publication ; owl:inverseOf :usedIn .
+
+
+# A :publication, :benchmark, and :software dc:hasIdentifier; particularly, a doi:, swmath:, morwiki:, etc. or plain URL.
+#dc:hasIdentifier a owl:ObjectProperty ; rdfs:domain :identifiable  ; rdfs:label "has identifier" ; owl:cardinality "0"^^xsd:nonNegativeInteger .
+dc:hasIdentifier a owl:DatatypeProperty ; rdfs:domain :identifiable  ; rdfs:range xsd:string ; rdfs:label "has identifier" ; owl:cardinality "0"^^xsd:nonNegativeInteger .
+
+# A category that can be applied to any object. Its domain could be any Thing.
+:category a owl:DatatypeProperty ; rdfs:domain :all_objects; rdfs:range xsd:string ; rdfs:label "has category" .

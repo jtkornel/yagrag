@@ -1,0 +1,533 @@
+{
+  "version": 1,
+  "description": "Semantic companion to the GQL schema migrations. GQL defines structure; this file defines semantics not expressible in GQL: labels, descriptions, usage notes, examples, domain/range constraints, OWL-style edge qualifiers (transitive/symmetric/inverse_of), canonical storage direction, and MaRDI cross-references. Consumers: extraction/graph-update prompt injection, schema linting, user-facing help, future RDF/OWL export. See docs/mardi/PLAN-mardi-schema-alignment.md.",
+  "storage_convention": "Lean storage (MathModDB convention): for inverse pairs only the canonical direction is stored; the inverse is expanded at query time. Symmetric edges are stored once, in either direction. Transitive edges store only direct links; closure is computed at query time.",
+  "nodes": {
+    "Document": {
+      "label": "document",
+      "description": "A document tracked by the KB: an ingested raw paper/report or a synthesized overview. Anchor for provenance — nearly every other node cites Document ids in its sources.",
+      "usage": "Created by the ingest pipeline; do not create domain content without a Document source.",
+      "extra_properties": {"kind": "raw|synthesized", "path": "repo-relative file path", "format": "pdf|md|html|...", "year": "publication year", "url": "canonical URL/DOI"}
+    },
+    "Author": {
+      "label": "author",
+      "description": "A person (or group) credited as author of a Document.",
+      "mardi_source": null
+    },
+    "Venue": {
+      "label": "venue",
+      "description": "Publication venue (journal, conference, workshop) of a Document."
+    },
+    "Concept": {
+      "label": "concept",
+      "description": "A general domain concept that is not (yet) a more specific type. Use sparingly — prefer specific types (Model, Algorithm, Quantity, ...) when applicable."
+    },
+    "Method": {
+      "label": "method",
+      "description": "A methodological approach or procedure, broader/looser than an Algorithm. Kept distinct from Algorithm for now (may later merge into the Algorithm subclass hierarchy).",
+      "extra_properties": {"code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation, statically checked"}
+    },
+    "Algorithm": {
+      "label": "algorithm",
+      "description": "A sequence of operations that solves a ComputationalTask. Organized in transitive SUBCLASS_OF hierarchies and HAS_COMPONENT decompositions; symmetric RELATED_TO links share algorithmic ideas.",
+      "mardi_source": "MathAlgoDB :algorithm",
+      "extra_properties": {"code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"}
+    },
+    "Model": {
+      "label": "mathematical model",
+      "description": "A mathematical model: an abstract formalization of an ApplicationProblem, containing Equations and Quantities, and linked to the ComputationalTasks it is used by.",
+      "usage": "Central anchor on the model side. Prefer linking models to algorithms indirectly via ComputationalTask (USED_BY/SOLVES) rather than direct Model-Algorithm edges.",
+      "mardi_source": "MathModDB Q68663 'mathematical model'"
+    },
+    "Equation": {
+      "label": "equation / formula",
+      "description": "A mathematical formulation (formula, equation, constraint) with an optional LaTeX rendering. MaRDI 'formula'. Assumptions should be expressed as Equations and linked via ASSUMES.",
+      "extra_properties": {"latex": "LaTeX source of the defining formula", "code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"},
+      "mardi_source": "MathModDB Q96183 'formula' (defining formula P989)"
+    },
+    "Quantity": {
+      "label": "quantity",
+      "description": "A concrete quantity appearing in equations (has symbol and optionally unit). Specializes a QuantityKind.",
+      "extra_properties": {"symbol": "mathematical symbol", "unit": "unit of measurement"},
+      "mardi_source": "MathModDB Q6534237 'quantity'"
+    },
+    "QuantityKind": {
+      "label": "quantity kind",
+      "description": "An abstract quantity type (e.g. length, time, mass) independent of any particular model. Anchor for QUDT/ISQ alignment.",
+      "extra_properties": {"qudt_id": "QUDT quantity kind IRI/ID", "isq_dimension": "ISQ dimension string"},
+      "mardi_source": "MathModDB Q6534245 'quantity kind'"
+    },
+    "Assumption": {
+      "label": "assumption",
+      "description": "An assumption under which a Model, Equation, or ComputationalTask holds, expressed informally (natural language) when no formal statement exists or the document does not provide one. When an assumption IS expressed equationally in the source, prefer capturing it as an Equation and linking it via ASSUMES (MaRDI convention). Both forms are valid ASSUMES targets; choose per document fidelity.",
+      "usage": "Capture assumptions as they appear in the document — do not formalize beyond what the source states."
+    },
+    "Metric": {
+      "label": "metric",
+      "description": "An evaluation metric used to assess algorithms, estimators, or systems."
+    },
+    "Dataset": {
+      "label": "dataset",
+      "description": "A collection of data used for evaluation or training. Distinct from Benchmark: a Dataset is raw material; a Benchmark is a standardized task instance."
+    },
+    "Benchmark": {
+      "label": "benchmark",
+      "description": "A standardized instance of a ComputationalTask used to test, evaluate and compare algorithms and software.",
+      "mardi_source": "MathAlgoDB :benchmark"
+    },
+    "Tool": {
+      "label": "software / tool",
+      "description": "A software package or tool implementing algorithms or used in experiments. MaRDI 'software'.",
+      "mardi_source": "MathAlgoDB :software"
+    },
+    "Application": {
+      "label": "application",
+      "description": "DEPRECATED in favor of ApplicationProblem. Existing nodes are retyped by the 0005 data migration.",
+      "deprecated": true
+    },
+    "ApplicationProblem": {
+      "label": "application problem",
+      "description": "A practical or scientific problem to be solved with the help of mathematical models (paper-era MaRDI 'Application Problem'; deliberately NOT restricted to research).",
+      "usage": "Contained in an ApplicationDomain; MODELLED_BY one or more Models.",
+      "mardi_source": "MathModDB Q6534292 'research problem' (v2.0) / paper-era 'Application Problem'"
+    },
+    "ApplicationDomain": {
+      "label": "application domain",
+      "description": "A domain in which application problems arise (e.g. robotics, civil engineering, epidemiology). Lightweight anchor for external subject classifications (MSC, PhysSH, ANZSRC) via properties rather than a managed taxonomy.",
+      "extra_properties": {"category": "free-text category tag", "msc_id": "Mathematics Subject Classification code", "wikidata_qid": "Wikidata QID"},
+      "mardi_source": "MathModDB Q60231 'academic discipline' (v2.0) / paper-era 'Application Domain'"
+    },
+    "ComputationalTask": {
+      "label": "computational task",
+      "description": "A well-posed mathematical/computational task derived from a model (simulation, inversion, state estimation, parameter identification, optimization, ...). The bridge between models and algorithms: Model USED_BY task, Algorithm SOLVES task, Benchmark INSTANCE_OF task.",
+      "usage": "Link models to algorithms through this node, never directly, so new algorithms become available to all models sharing the task.",
+      "extra_properties": {"category": "free-text category tag", "wikidata_qid": "Wikidata QID"},
+      "mardi_source": "MathModDB Q6534247 'computational task' / MathAlgoDB :problem 'Algorithmic Task'"
+    },
+    "System": {
+      "label": "system",
+      "description": "An engineered or physical system under study (e.g. a robot platform, a sensor rig)."
+    },
+    "FactorGraph": {
+      "label": "factor graph",
+      "description": "A factor graph: bipartite probabilistic graphical model of Variables and Factors, typically optimized by a StateEstimator."
+    },
+    "Variable": {
+      "label": "variable",
+      "description": "A state variable in a factor graph or estimation problem.",
+      "extra_properties": {"symbol": "...", "domain": "e.g. SE(3), R^n", "dimension": "integer dimension"}
+    },
+    "Factor": {
+      "label": "factor",
+      "description": "A factor in a factor graph: a probabilistic constraint over variables, derived from a measurement or prior.",
+      "extra_properties": {"factor_type": "...", "code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"}
+    },
+    "StateEstimator": {
+      "label": "state estimator",
+      "description": "A system/algorithm configuration that estimates state variables from measurements (e.g. EKF, factor-graph smoother)."
+    },
+    "MotionModel": {
+      "label": "motion model",
+      "description": "A process model predicting state evolution over time, used by estimators.",
+      "extra_properties": {"code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"}
+    },
+    "SensorModel": {
+      "label": "sensor model",
+      "description": "A measurement model mapping state (and sensor parameters) to expected observations.",
+      "extra_properties": {"code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"}
+    },
+    "Sensor": {
+      "label": "sensor",
+      "description": "A physical sensing device.",
+      "extra_properties": {"modality": "e.g. camera, IMU, lidar, wheel odometry"}
+    },
+    "Solver": {
+      "label": "solver",
+      "description": "A numerical solver/optimizer (e.g. Levenberg-Marquardt, IPOPT) used inside algorithms or estimators."
+    },
+    "Constraint": {
+      "label": "constraint",
+      "description": "A constraint restricting admissible states, parameters, or solutions."
+    },
+    "CoordinateFrame": {
+      "label": "coordinate frame",
+      "description": "A named coordinate frame and its convention (e.g. body frame, ENU, camera optical frame)."
+    },
+    "Robot": {
+      "label": "robot",
+      "description": "A robot platform or robot type under study."
+    },
+    "Task": {
+      "label": "task",
+      "description": "A robot/system-level task (e.g. navigation, mapping). Distinct from ComputationalTask, which is the mathematical task derived from a model. Computational Task-nodes are migrated to ComputationalTask by the 0005 data migration."
+    },
+    "NoiseModel": {
+      "label": "noise model",
+      "description": "A stochastic model of measurement or process noise.",
+      "extra_properties": {"code_language": "...", "code_path": "...", "code_entry": "...", "code_status": "...", "code_checked_at": "...", "code_checker": "...", "code_hash": "optional executable representation"}
+    },
+    "Claim": {
+      "label": "claim",
+      "description": "A reified statement: subject (via ABOUT), predicate, and object (via HAS_OBJECT to an entity, or object_literal). Used for facts that need qualifiers or provenance beyond a plain edge.",
+      "extra_properties": {"predicate": "relation name", "object_literal": "literal object if not an entity", "qualifiers": "JSON-encoded qualifier map"}
+    },
+    "Acronym": {
+      "label": "acronym",
+      "description": "An acronym/abbreviation and its expansion, for domain-agnostic term resolution.",
+      "extra_properties": {"short_form": "...", "expansion": "...", "domain_context": "..."}
+    }
+  },
+  "edges": {
+    "CITES": {
+      "label": "cites",
+      "description": "Document cites another Document.",
+      "domain": ["Document"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "AUTHORED_BY": {
+      "label": "authored by",
+      "description": "Document is authored by an Author.",
+      "domain": ["Document"], "range": ["Author"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "PUBLISHED_IN": {
+      "label": "published in",
+      "description": "Document was published in a Venue.",
+      "domain": ["Document"], "range": ["Venue"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "DERIVED_FROM": {
+      "label": "derived from",
+      "description": "Entity (typically a synthesized Document or a refined node) is derived from another entity.",
+      "transitive": true, "symmetric": false, "inverse_of": null
+    },
+    "MENTIONS": {
+      "label": "mentions",
+      "description": "Document mentions an entity (weak link; prefer typed relations when the role is known).",
+      "domain": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "DEFINES": {
+      "label": "defines",
+      "description": "Document formally defines an entity (stronger than MENTIONS).",
+      "domain": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "SUPPORTS": {
+      "label": "supports",
+      "description": "Document or Claim provides evidence supporting another Document or Claim.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "CONTRADICTS": {
+      "label": "contradicts",
+      "description": "Document or Claim contradicts another Document or Claim.",
+      "transitive": false, "symmetric": true, "inverse_of": null
+    },
+    "ABOUT": {
+      "label": "about",
+      "description": "Claim's subject entity (reified-statement machinery).",
+      "domain": ["Claim"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "HAS_OBJECT": {
+      "label": "has object",
+      "description": "Claim's object entity (reified-statement machinery).",
+      "domain": ["Claim"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "RELATES_TO": {
+      "label": "relates to",
+      "description": "Generic association when no more specific relation applies. Prefer typed relations.",
+      "transitive": false, "symmetric": true, "inverse_of": null
+    },
+    "PART_OF": {
+      "label": "part of",
+      "description": "Structural containment/composition between entities of any kind (component —PART_OF→ whole).",
+      "transitive": true, "symmetric": false, "inverse_of": null
+    },
+    "SPECIALIZES": {
+      "label": "specializes",
+      "description": "A is a specialization/constraint/special case of B, within the same node type. Used for Model, Equation, Quantity, ComputationalTask, ApplicationProblem, ApplicationDomain, Algorithm hierarchies.",
+      "usage": "Store only direct specialization links; query helpers compute the transitive closure.",
+      "transitive": true, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1684 'specialized by' (we store the inverse direction); MathAlgoDB :specializes"
+    },
+    "USES": {
+      "label": "uses",
+      "description": "Entity employs another entity as a tool/component/ingredient. For algorithms prefer HAS_COMPONENT; for the model→task bridge use USED_BY.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "IMPLEMENTS": {
+      "label": "implements",
+      "description": "Tool (software), Algorithm, or System implements a Method or Algorithm.",
+      "domain": ["Tool", "Algorithm", "System"], "range": ["Algorithm", "Method"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :implements"
+    },
+    "APPLIES_TO": {
+      "label": "applies to",
+      "description": "Entity applies to / is relevant for another entity (e.g. method applies to a problem class). Where an ApplicationProblem is modelled by a Model, prefer MODELLED_BY.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "HAS_VARIABLE": {
+      "label": "has variable",
+      "description": "FactorGraph or Factor involves a Variable.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "HAS_FACTOR": {
+      "label": "has factor",
+      "description": "FactorGraph contains a Factor.",
+      "domain": ["FactorGraph"], "range": ["Factor"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "CONNECTS": {
+      "label": "connects",
+      "description": "Factor connects to a Variable (factor-graph incidence).",
+      "domain": ["Factor"], "range": ["Variable"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "ESTIMATES": {
+      "label": "estimates",
+      "description": "StateEstimator estimates a Variable or Quantity.",
+      "domain": ["StateEstimator"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "MEASURES": {
+      "label": "measures",
+      "description": "Sensor or SensorModel measures a Quantity or Variable.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "ASSUMES": {
+      "label": "assumes",
+      "description": "Model, Equation, or ComputationalTask holds under the assumption expressed by the target. The target is an Equation when the assumption is stated formally, or an Assumption node for informal/natural-language assumptions — both are first-class.",
+      "usage": "Match the document's level of formalization: Equation target for stated formulas, Assumption node otherwise.",
+      "range": ["Equation", "Assumption", "Model"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1674 'assumes'"
+    },
+    "OPTIMIZES": {
+      "label": "optimizes",
+      "description": "Solver or StateEstimator optimizes a FactorGraph or objective.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "SOLVED_BY": {
+      "label": "solved by",
+      "description": "Legacy/general 'is solved by' link. For the model/algorithm alignment prefer ComputationalTask + SOLVES.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "DEFINED_BY": {
+      "label": "defined by",
+      "description": "Entity is formally defined by an Equation (e.g. Algorithm DEFINED_BY Equation, Variable DEFINED_BY Equation).",
+      "range": ["Equation"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "EVALUATED_ON": {
+      "label": "evaluated on",
+      "description": "Algorithm/Tool is evaluated on a Dataset or Benchmark; Metric may be involved via Claims.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "EXPRESSED_IN": {
+      "label": "expressed in",
+      "description": "Quantity or Equation is expressed in a CoordinateFrame or unit context.",
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "HAS_NOISE": {
+      "label": "has noise model",
+      "description": "SensorModel or MotionModel has a NoiseModel.",
+      "range": ["NoiseModel"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "USES_SYMBOL": {
+      "label": "uses symbol",
+      "description": "Equation, MotionModel, or Method uses a Quantity/Variable as a symbol in its mathematical expression (MaRDI 'in defining formula', P983).",
+      "domain": ["Equation", "MotionModel", "SensorModel", "Algorithm", "Method"], "range": ["Quantity", "Variable"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P983 'in defining formula'"
+    },
+    "EXPRESSED_BY": {
+      "label": "expressed by",
+      "description": "Model, MotionModel, SensorModel, NoiseModel, Algorithm, Method, ComputationalTask, or Quantity is expressed by an Equation or MotionModel (its mathematical formulation).",
+      "domain": ["Model", "MotionModel", "SensorModel", "NoiseModel", "Algorithm", "Method", "ComputationalTask", "Quantity"], "range": ["Equation", "MotionModel"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "USES_ACRONYM": {
+      "label": "uses acronym",
+      "description": "Entity (Document, Method, Algorithm, Equation, Model, Robot, etc.) uses an Acronym in its text or definition.",
+      "domain": [], "range": ["Acronym"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "STANDS_FOR": {
+      "label": "stands for",
+      "description": "Acronym stands for an entity it abbreviates.",
+      "domain": ["Acronym"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "MODELLED_BY": {
+      "label": "modelled by",
+      "description": "An ApplicationProblem P is modelled by a Model M if M formalizes P so it can be treated with mathematical/numerical methods.",
+      "usage": "Canonical direction of the pair (MathModDB lean convention). The inverse MODELS is expanded at query time.",
+      "example": "microfracture detection in porous media —MODELLED_BY→ X-ray transform model",
+      "domain": ["ApplicationProblem"], "range": ["Model"],
+      "transitive": false, "symmetric": false, "inverse_of": "MODELS",
+      "mardi_source": "MathModDB P1513 'modelled by'"
+    },
+    "MODELS": {
+      "label": "models",
+      "description": "Inverse of MODELLED_BY: a Model formalizes an ApplicationProblem. Not stored; expanded at query time.",
+      "domain": ["Model"], "range": ["ApplicationProblem"],
+      "transitive": false, "symmetric": false, "inverse_of": "MODELLED_BY",
+      "stored": false
+    },
+    "USED_BY": {
+      "label": "used by",
+      "description": "A Model is used by a ComputationalTask: the mathematical task that must be solved to apply the model. The MathModDB→MathAlgoDB bridge.",
+      "usage": "Canonical bridge edge. Algorithms reach the model indirectly via SOLVES on the same task.",
+      "example": "X-ray transform model —USED_BY→ inversion of the X-ray transform",
+      "domain": ["Model"], "range": ["ComputationalTask"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P147 'used by' (paper: 'uses algorithmic problem')"
+    },
+    "SOLVES": {
+      "label": "solves",
+      "description": "An Algorithm, Method, or StateEstimator provides a solution to a ComputationalTask.",
+      "domain": ["Algorithm", "Method", "StateEstimator"], "range": ["ComputationalTask"],
+      "transitive": false, "symmetric": false, "inverse_of": "SOLVED_BY",
+      "mardi_source": "MathAlgoDB :solves"
+    },
+    "INSTANCE_OF": {
+      "label": "instance of",
+      "description": "A Benchmark is a concrete, standardized instance of a ComputationalTask.",
+      "domain": ["Benchmark"], "range": ["ComputationalTask"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :instanceOf"
+    },
+    "TESTS": {
+      "label": "tests",
+      "description": "A Tool (software) is run against a Benchmark.",
+      "domain": ["Tool"], "range": ["Benchmark"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :tests"
+    },
+    "SUBCLASS_OF": {
+      "label": "subclass of (algorithm)",
+      "description": "Algorithm A is a subclass of algorithm B if B is the simpler/more general version and A uses the essential algorithmic ideas of B (e.g. EKF SUBCLASS_OF KF).",
+      "usage": "Store only direct links; transitive closure at query time.",
+      "example": "unscented Kalman filter —SUBCLASS_OF→ Kalman filter",
+      "domain": ["Algorithm"], "range": ["Algorithm"],
+      "transitive": true, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :subclassOf (owl:TransitiveProperty)"
+    },
+    "HAS_COMPONENT": {
+      "label": "has component",
+      "description": "Algorithm A has component algorithm B if B is used to complete A (e.g. a smoother HAS_COMPONENT a linear solver).",
+      "domain": ["Algorithm"], "range": ["Algorithm"],
+      "transitive": true, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :hasComponent (owl:TransitiveProperty)"
+    },
+    "DISCRETIZED_BY": {
+      "label": "discretized by",
+      "description": "A continuous Model/Equation is discretized by another Model/Equation (e.g. Hamiltonian operator —DISCRETIZED_BY→ discrete Hamiltonian).",
+      "domain": ["Model", "Equation"], "range": ["Model", "Equation"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1656 'discretized by'"
+    },
+    "LINEARIZED_BY": {
+      "label": "linearized by",
+      "description": "A nonlinear Model/Equation/ComputationalTask is linearized by another (e.g. nonlinear motion model —LINEARIZED_BY→ its Jacobian linearization).",
+      "domain": ["Model", "Equation", "ComputationalTask"], "range": ["Model", "Equation", "ComputationalTask"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1657 'linearized by'"
+    },
+    "APPROXIMATED_BY": {
+      "label": "approximated by",
+      "description": "A Model/Equation is approximated by a simpler or reduced Model/Equation (e.g. full model —APPROXIMATED_BY→ reduced-order model).",
+      "domain": ["Model", "Equation"], "range": ["Model", "Equation"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1655 'approximated by'"
+    },
+    "NONDIMENSIONALIZED_BY": {
+      "label": "nondimensionalized by",
+      "description": "A Quantity is nondimensionalized by another Quantity (e.g. permittivity —NONDIMENSIONALIZED_BY→ relative permittivity).",
+      "domain": ["Quantity"], "range": ["Quantity"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1658 'nondimensionalized by'"
+    },
+    "HAS_WEAK_FORMULATION": {
+      "label": "has weak formulation",
+      "description": "An Equation or Model (strong form) has the target Equation or Model as its weak/variational formulation.",
+      "domain": ["Equation", "Model"], "range": ["Equation", "Model"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1736 'has weak formulation'"
+    },
+    "SOLUTION_TO": {
+      "label": "solution to",
+      "description": "An Equation is a (known analytical) solution to a Model.",
+      "domain": ["Equation"], "range": ["Model"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB P1692 'solution to'"
+    },
+    "SIMILAR_TO": {
+      "label": "similar to",
+      "description": "Two entities of the same type are similar but neither is a specialization/generalization of the other.",
+      "usage": "Store once, in either direction; matched both ways at query time.",
+      "transitive": false, "symmetric": true, "inverse_of": null,
+      "mardi_source": "MathModDB P1691 'similar to'"
+    },
+    "INVENTED_IN": {
+      "label": "invented in",
+      "description": "Algorithm was invented/introduced in a Document (publication). Multiple documents may invent the same algorithm.",
+      "domain": ["Algorithm"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :inventedIn"
+    },
+    "ANALYZED_IN": {
+      "label": "analyzed in",
+      "description": "Algorithm's theoretical analysis appears in a Document.",
+      "domain": ["Algorithm"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :analyzedIn"
+    },
+    "STUDIED_IN": {
+      "label": "studied in",
+      "description": "Algorithm is numerically tested/studied in a Document.",
+      "domain": ["Algorithm"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :studiedIn"
+    },
+    "APPLIED_IN": {
+      "label": "applied in",
+      "description": "Algorithm is practically applied in a Document.",
+      "domain": ["Algorithm"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :appliedIn"
+    },
+    "REVIEWED_IN": {
+      "label": "reviewed in",
+      "description": "Algorithm is described in a survey/review Document.",
+      "domain": ["Algorithm"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :reviewedIn"
+    },
+    "DOCUMENTED_IN": {
+      "label": "documented in",
+      "description": "Tool or Benchmark is described in a Document.",
+      "domain": ["Tool", "Benchmark"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :documentedIn"
+    },
+    "USED_IN": {
+      "label": "used in",
+      "description": "Tool or Benchmark is utilized for computer-based experiments in a Document.",
+      "domain": ["Tool", "Benchmark"], "range": ["Document"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathAlgoDB :usedIn"
+    },
+    "HAS_KIND": {
+      "label": "has quantity kind",
+      "description": "A Quantity has the abstract QuantityKind it instantiates (e.g. 'wheelbase of robot X' —HAS_KIND→ 'length').",
+      "domain": ["Quantity"], "range": ["QuantityKind"],
+      "transitive": false, "symmetric": false, "inverse_of": null,
+      "mardi_source": "MathModDB quantity/quantity kind split (Q6534237/Q6534245)"
+    }
+  }
+}

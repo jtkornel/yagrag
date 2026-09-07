@@ -15,11 +15,12 @@ Trigger this skill when:
 ## Steps
 
 1.  **Read Text**: Run `kb doc text <id>` to retrieve the full content of the document.
-2.  **Identify Entities**: Scan the text for nodes matching the seed schema. Look for:
-    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
-    *   **Models**: `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
+2.  **Identify Entities**: Scan the text for nodes matching the seed schema. Consult `schema/schema_companion.json` for per-type semantics and examples. Look for:
+    *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `QuantityKind` (abstract quantity types like length/time, only when the text treats them generically), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
+    *   **Models**: `Model` (mathematical model as a whole), `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
     *   **Architecture**: `StateEstimator` (e.g., EKF, iSAM2), `Solver` (e.g., Levenberg-Marquardt), `Robot`, `Sensor`.
-    *   **Academic & Conceptual**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Metric` (e.g., ATE, RPE), `Assumption`, `Concept`.
+    *   **Academic & Conceptual**: `Method`, `Algorithm` (capture a Python reference implementation if available), `Dataset` (e.g., KITTI, Euroc), `Benchmark` (standardized task instances used to compare algorithms), `Metric` (e.g., ATE, RPE), `Assumption` (informal/natural-language assumptions), `Concept`. Assumptions are linked via `ASSUMES`: target an `Equation` when the source states the assumption formally, otherwise an `Assumption` node — capture knowledge at the fidelity it appears in the document.
+    *   **Application & Task (MaRDI alignment)**: `ApplicationDomain` (e.g. robotics, precision agriculture), `ApplicationProblem` (the practical problem being solved), `ComputationalTask` (the mathematical task derived from a model: state estimation, parameter identification, trajectory optimization, ...). This is the bridge between models and algorithms — extract it whenever a paper says a model is "used for" X.
     *   **Linguistic & Terminological**: `Acronym` (capture `short_form`, `expansion`, `domain_context`, and `summary`; e.g., `short_form: "SLAM"`, `expansion: "Simultaneous Localization and Mapping"`; ID convention: `acronym:<short_slug>:<expansion_slug>`).
 3.  **Upsert Nodes**: For each entity, run `kb graph upsert-node <Label> --props '...'`. 
     *   **Crucial**: Every node MUST include `origin: "raw"` and `sources: ["<doc_id>"]`.
@@ -41,7 +42,7 @@ Trigger this skill when:
     *   `MENTIONS`: For existing concepts, related work cited, or established acronyms used in the text (e.g., `(Document)-[:MENTIONS]->(Acronym)`).
     *   `SUPPORTS`: To link the `Document` to the `Claim` nodes it asserts.
     *   `CITES`: To link the `Document` node to other `Document` nodes when the paper directly references another document present in the knowledge base (e.g., `(citing_doc)-[:CITES]->(cited_doc)`).
-6.  **Cross-Link Domain & Acronyms (Zero Floating Nodes)**: Connect domain entities directly:
+6.  **Cross-Link Domain & Acronyms (Zero Floating Nodes)**: Connect domain entities directly. Canonical directions and semantics per edge are in `schema/schema_companion.json` — follow them.
     *   `StateEstimator` --`USES`--> `Algorithm` / `Method` / `MotionModel` / `SensorModel` / `FactorGraph` / `Solver`.
     *   `Any Node` --`USES_ACRONYM`--> `Acronym`: Link any method, estimator, model, algorithm, equation, dataset, or concept whose definition/text uses the acronym.
     *   `Acronym` --`STANDS_FOR`--> `Concept` / `StateEstimator` / `Method`: Link the acronym to the formal domain entity it represents.
@@ -49,6 +50,15 @@ Trigger this skill when:
     *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms, intermediate symbols, normalization constants, and sub-expression parameters appearing inside its expression.
     *   `FactorGraph` --`HAS_VARIABLE`--> `Variable`, `FactorGraph` --`HAS_FACTOR`--> `Factor`.
     *   `Algorithm` / `Method` / `System` --`EVALUATED_ON`--> `Dataset` / `Metric`.
+    *   **MaRDI alignment edges** (see companion for full semantics):
+        *   `ApplicationDomain` --`CONTAINS`--> `ApplicationProblem`; `ApplicationProblem` --`MODELLED_BY`--> `Model`.
+        *   `Model` --`USED_BY`--> `ComputationalTask`; `Algorithm` --`SOLVES`--> `ComputationalTask`. Prefer this bridge over direct Model–Algorithm edges.
+        *   `Benchmark` --`INSTANCE_OF`--> `ComputationalTask`; `Tool` --`TESTS`--> `Benchmark`.
+        *   Algorithm hierarchies: `Algorithm` --`SUBCLASS_OF`--> `Algorithm` (B is the more general algorithm), `Algorithm` --`HAS_COMPONENT`--> `Algorithm` (B is a subroutine of A). Both transitive — store direct links only.
+        *   Model/Equation transformations: `DISCRETIZED_BY`, `LINEARIZED_BY`, `APPROXIMATED_BY`, `NONDIMENSIONALIZED_BY` (Quantity), `HAS_WEAK_FORMULATION` (Equation).
+        *   `Model`/`Equation` --`ASSUMES`--> `Equation` (formally stated assumption) or `Assumption` (informal assumption).
+        *   Publication roles: `Algorithm` --`INVENTED_IN`/`ANALYZED_IN`/`STUDIED_IN`/`APPLIED_IN`/`REVIEWED_IN`--> `Document`; `Tool`/`Benchmark` --`DOCUMENTED_IN`/`USED_IN`--> `Document`.
+        *   `Quantity` --`HAS_KIND`--> `QuantityKind`.
     *   Every extracted node MUST be connected via at least one relationship edge. Floating nodes with 0 edges are prohibited.
 7.  **Record Citations via `kb doc cite`**: Scan the document's reference section / bibliography for all cited papers and record them using the single mechanical command `kb doc cite`:
     ```bash
@@ -64,7 +74,8 @@ Trigger this skill when:
 *   **No Prose Summaries**: A document summary is a failure. You must extract the underlying structured facts.
 *   **Mandatory Provenance**: Every `upsert-node`, `upsert-edge`, and `upsert-claim` MUST include `origin` and `sources` in its properties.
 *   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
-*   **Relationship Schema Compatibility**: Always check `kb schema show` to verify allowed `(from, to)` node labels for each relationship type (e.g. `DEFINED_BY` allows `MotionModel`, `Quantity`, `Algorithm`, etc. to `Equation`, but not generic `Model`; `USES` allows `StateEstimator -> Method` or `System -> Sensor`, but not `Method -> Sensor`).
+*   **Relationship Schema Compatibility**: Always check `kb schema show` and `schema/schema_companion.json` to verify allowed `(from, to)` node labels for each relationship type (e.g. `DEFINED_BY` allows `MotionModel`, `Quantity`, `Algorithm`, etc. to `Equation`, but not generic `Model`; `USES` allows `StateEstimator -> Method` or `System -> Sensor`, but not `Method -> Sensor`).
+*   **Edge Direction & Qualifiers**: Store each edge only in its canonical direction (see companion `storage_convention`). Never store inverse edges (e.g. no `MODELS` — only `MODELLED_BY`). For symmetric edges (`SIMILAR_TO`, `RELATES_TO`, `CONTRADICTS`), store once in either direction. For transitive edges (`SPECIALIZES`, `SUBCLASS_OF`, `HAS_COMPONENT`, `PART_OF`, `DERIVED_FROM`), store only direct links, never inferred closures.
 *   **Symbol Consistency for SymPy**: When extracting `Quantity` nodes whose symbols appear in `.sympy` expressions checked with `kb code check`, ensure the `symbol`, `name`, or `id` matches the exact SymPy variable identifier (e.g. `"chi"`, `"omega_z"`, `"theta"`), avoiding unknown symbol warnings.
 *   **Symbol Sanitization**: For `Variable` and `Quantity` nodes, `symbol` must contain ONLY the clean symbol string for that specific entity (e.g. `"B_s"`, `"f_r"`, `"chi"`), never concatenated or combined multi-variable text.
 *   **Intermediate Symbol Extraction / Symbol Interconnectivity**: Extract not only primary physical variables and measurements, but also intermediate equation parameters, normalization factors, constants, and sub-expression symbols (e.g. $C$, $N$, $\theta_k$) as explicit `Quantity` nodes. Wire each parameter to its parent `Equation` via `USES_SYMBOL` edges. This maximizes graph interconnectivity, prevents unlinked mathematical terms, and ensures SymPy static checks (`kb code check`) verify all free symbols without unknown symbol warnings.

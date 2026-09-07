@@ -7,6 +7,7 @@ rows; `export` dumps all nodes and relationships as JSON.
 
 from __future__ import annotations
 
+import contextlib
 import json as _json
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ from ..graph.upsert import (
     upsert_edge,
     upsert_node,
 )
+from ..schema.companion import load_companion
 from ..schema.migrations import MIGRATIONS_TABLE
 
 graph_app = typer.Typer(
@@ -579,6 +581,46 @@ def cmd_lint(
                             "message": f"Acronym {aid} is missing 'expansion' property.",
                         }
                     )
+
+        # 6. Edge Domain & Range Audit against schema companion
+        companion_path = g.db_path.parent / "schema" / "schema_companion.json"
+        if not companion_path.is_file():
+            companion_path = g.db_path.parent.parent / "schema" / "schema_companion.json"
+        if companion_path.is_file():
+            with contextlib.suppress(Exception):
+                comp = load_companion(companion_path)
+                for rel in rel_tables:
+                    sem = comp.canonical_edge(rel) or comp.edge(rel)
+                    if sem and (sem.domain or sem.range):
+                        edges = g.execute(
+                            f"MATCH (a)-[r:{rel}]->(b) "
+                            f"RETURN labels(a) AS fl, a.id AS fid, labels(b) AS tl, b.id AS tid"
+                        )
+                        for e in edges:
+                            fl = (e.get("fl") or [None])[0]
+                            tl = (e.get("tl") or [None])[0]
+                            fid = e.get("fid")
+                            tid = e.get("tid")
+                            if sem.domain and fl not in sem.domain:
+                                issues.append(
+                                    {
+                                        "category": "domain_range_violation",
+                                        "severity": "error",
+                                        "id": f"{fid}-[{rel}]->{tid}",
+                                        "node_type": rel,
+                                        "message": f"Edge ({fl}:{fid})-[:{rel}]->({tl}:{tid}) violates domain: {fl!r} not in {sem.domain}",
+                                    }
+                                )
+                            if sem.range and tl not in sem.range:
+                                issues.append(
+                                    {
+                                        "category": "domain_range_violation",
+                                        "severity": "error",
+                                        "id": f"{fid}-[{rel}]->{tid}",
+                                        "node_type": rel,
+                                        "message": f"Edge ({fl}:{fid})-[:{rel}]->({tl}:{tid}) violates range: {tl!r} not in {sem.range}",
+                                    }
+                                )
     finally:
         g.close()
 

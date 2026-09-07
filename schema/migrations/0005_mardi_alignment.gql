@@ -1,0 +1,61 @@
+-- Migration 0005: MaRDI MathModDB/MathAlgoDB schema alignment.
+-- Companion semantics (labels/descriptions/qualifiers): schema/schema_companion.json
+-- Plan: docs/mardi/PLAN-mardi-schema-alignment.md
+
+-- New node types -------------------------------------------------------------
+
+CREATE NODE TYPE ComputationalTask (
+    id STRING, name STRING, summary STRING, origin STRING, sources LIST,
+    confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP,
+    category STRING, wikidata_qid STRING
+);
+
+CREATE NODE TYPE ApplicationProblem (
+    id STRING, name STRING, summary STRING, origin STRING, sources LIST,
+    confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP,
+    wikidata_qid STRING
+);
+
+CREATE NODE TYPE ApplicationDomain (
+    id STRING, name STRING, summary STRING, origin STRING, sources LIST,
+    confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP,
+    category STRING, msc_id STRING, wikidata_qid STRING
+);
+
+CREATE NODE TYPE QuantityKind (
+    id STRING, name STRING, summary STRING, origin STRING, sources LIST,
+    confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP,
+    qudt_id STRING, isq_dimension STRING, wikidata_qid STRING
+);
+
+CREATE NODE TYPE Benchmark (
+    id STRING, name STRING, summary STRING, origin STRING, sources LIST,
+    confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP,
+    category STRING, wikidata_qid STRING
+);
+
+-- New edge types -------------------------------------------------------------
+
+CREATE EDGE TYPE MODELLED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE MODELS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE USED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SOLVES (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE INSTANCE_OF (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE TESTS (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SUBCLASS_OF (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_COMPONENT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE DISCRETIZED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE LINEARIZED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE APPROXIMATED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE NONDIMENSIONALIZED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_WEAK_FORMULATION (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SOLUTION_TO (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE SIMILAR_TO (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE INVENTED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE ANALYZED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE STUDIED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE APPLIED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE REVIEWED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE DOCUMENTED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE USED_IN (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);
+CREATE EDGE TYPE HAS_KIND (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);

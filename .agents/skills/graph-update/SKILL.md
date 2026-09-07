@@ -24,6 +24,7 @@ Trigger this skill when:
     *   Ensure each claim has its own `origin`, `sources`, and `confidence` properties.
     *   This preserves the history of the disagreement in the field.
 4.  **Update Edges**: Use `kb graph upsert-edge`. If an edge between two nodes already exists, updating it with a new source ID reinforces the relationship and increases overall graph confidence.
+    *   Respect the canonical edge directions and qualifiers in `schema/schema_companion.json`: never create inverse-direction duplicates (e.g. only `MODELLED_BY`, never `MODELS`); store symmetric edges (`SIMILAR_TO`, `RELATES_TO`, `CONTRADICTS`) only once per pair; store only direct links for transitive edges (`SPECIALIZES`, `SUBCLASS_OF`, `HAS_COMPONENT`, `PART_OF`, `DERIVED_FROM`). When reconciling duplicates, check both directions for symmetric edges before adding a new one.
 5.  **Merge Duplicates**: Use `kb graph dedupe` for automated multi-entity cluster merging, or manually:
     *   Identify the most descriptive ID as the primary.
     *   Update all edges pointing to/from the duplicate to point to the primary.
@@ -36,6 +37,7 @@ Trigger this skill when:
 *   **No Overwriting Evidence**: Never delete a source ID from a node's `sources` list. The list should represent the union of all documents that support the entity's existence.
 *   **Conflict Visibility**: Do not "resolve" conflicting claims by picking a winner. The graph must reflect the raw state of human knowledge, including its contradictions.
 *   **Stable IDs**: Prefer meaningful, lowercase, underscored IDs (e.g., `algo_ekf_slam`) over internal system hashes. This makes the Cypher queries more readable.
+*   **MaRDI Types**: When merging or retyping, prefer the aligned types — `ApplicationProblem` (not `Application`), `ComputationalTask` for mathematical tasks (not `Task`). Assumptions keep both forms: `Equation` targets for formally stated assumptions, `Assumption` nodes for informal ones — never force-formalize an informal assumption. See companion entries marked `deprecated`.
 *   **Confidence Updates**: If multiple high-quality sources agree on a fact, consider slightly increasing the `confidence` score (e.g., from 0.9 to 0.95).
 
 ## Example
