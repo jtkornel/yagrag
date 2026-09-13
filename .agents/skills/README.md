@@ -5,10 +5,7 @@ knowledge-base workflow. The skills invoke the deterministic `kb` CLI to
 perform actual document-store and graph-database operations.
 
 Each skill is a folder with a `SKILL.md` file, following the open
-[Agent Skills](https://agentskills.io) format. They live under `.agents/skills/`
-rather than a vendor-specific directory (`.junie/skills/`, `.claude/skills/`,
-`.cursor/skills/`, …), which is the cross-client convention: agents that
-support the format discover them here without any per-tool configuration.
+[Agent Skills](https://agentskills.io) format.
 
 Core workflow skills:
 - [domain-modeling](./domain-modeling/SKILL.md) — interview the user, propose an initial schema.
