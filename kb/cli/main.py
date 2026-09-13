@@ -20,6 +20,7 @@ from .doc_cmd import doc_app
 from .graph_cmd import graph_app
 from .index_cmd import index_app, search_command
 from .math_cmd import math_app
+from .remote_cmd import handle_clone, handle_pull, handle_push, remote_app
 from .schema_cmd import schema_app
 
 app = typer.Typer(
@@ -34,7 +35,87 @@ app.add_typer(doc_app)
 app.add_typer(graph_app)
 app.add_typer(index_app)
 app.add_typer(math_app, name="math")
+app.add_typer(remote_app, name="remote")
 app.command("search")(search_command)
+
+
+@app.command("clone")
+def cmd_clone(
+    url: str = typer.Argument(
+        ...,
+        help="Git repository URL or GitHub shorthand (owner/repo) of the knowledge base.",
+    ),
+    dest: Path | None = typer.Argument(
+        None,
+        help="Destination directory to clone into (defaults to repository name).",
+    ),
+    restore_dump: bool = typer.Option(
+        True,
+        "--restore-dump/--no-restore-dump",
+        help="Restore graph database from dump if present in the cloned repository.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Emit machine-readable JSON on stdout.",
+    ),
+) -> None:
+    """Clone a remote knowledge base repository and initialize it."""
+    handle_clone(url, dest=dest, restore_dump=restore_dump, json_output=json_output)
+
+
+@app.command("pull")
+def cmd_pull(
+    kb: Path = typer.Option(
+        Path("."),
+        "--kb",
+        help="Knowledge base directory to pull into.",
+    ),
+    migrate: bool = typer.Option(
+        True,
+        "--migrate/--no-migrate",
+        help="Automatically apply newly received schema migrations.",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Emit machine-readable JSON on stdout.",
+    ),
+) -> None:
+    """Pull upstream updates for this knowledge base and apply pending migrations."""
+    handle_pull(kb=kb, migrate=migrate, json_output=json_output)
+
+
+@app.command("push")
+def cmd_push(
+    kb: Path = typer.Option(
+        Path("."),
+        "--kb",
+        help="Knowledge base directory to push from.",
+    ),
+    remote: str = typer.Option(
+        "origin",
+        "--remote",
+        "-r",
+        help="Remote name to push to.",
+    ),
+    branch: str | None = typer.Option(
+        None,
+        "--branch",
+        "-b",
+        help="Branch name to push (defaults to current tracking branch).",
+    ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        "-j",
+        help="Emit machine-readable JSON on stdout.",
+    ),
+) -> None:
+    """Push local commits for this knowledge base to a remote."""
+    handle_push(kb=kb, remote=remote, branch=branch, json_output=json_output)
 
 _console = Console()
 _err_console = Console(stderr=True)

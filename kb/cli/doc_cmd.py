@@ -214,6 +214,7 @@ def cmd_add(
 @doc_app.command("list")
 def cmd_list(
     kind: str | None = typer.Option(None, "--kind", help="Filter: raw | synthesized."),
+    missing: bool = typer.Option(False, "--missing", help="Filter by documents whose file is missing on disk."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
@@ -226,13 +227,131 @@ def cmd_list(
         return
     if kind is not None:
         records = [r for r in records if r.kind == kind]
+    if missing:
+        records = [r for r in records if not (kb / r.path).is_file()]
     if json_output:
         typer.echo(_json.dumps([r.to_dict() for r in records], indent=2))
         return
-    table = Table("id", "kind", "format", "title", "path")
+    table = Table("id", "kind", "format", "title", "status", "path")
     for r in records:
-        table.add_row(r.id, r.kind, r.format, r.title, r.path)
+        on_disk = (kb / r.path).is_file()
+        status = "[green]present[/green]" if on_disk else "[red]missing[/red]"
+        table.add_row(r.id, r.kind, r.format, r.title, status, r.path)
     _console.print(table)
+
+
+@doc_app.command("fetch")
+def cmd_fetch(
+    doc_id: str | None = typer.Argument(
+        None,
+        help="Specific document ID to fetch (e.g. raw-0001). If omitted, fetches all missing documents.",
+    ),
+    all_docs: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Fetch all documents in the manifest with URLs, including existing ones (overwrites).",
+    ),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Download raw document files from URLs recorded in manifest.json and verify SHA-256."""
+    import hashlib
+    import urllib.request
+    from ..store.documents import content_hash
+
+    store = _open_store(kb, json_output)
+    records = store.records()
+
+    if doc_id:
+        targets = [r for r in records if r.id == doc_id]
+        if not targets:
+            _fail(f"document {doc_id!r} not found in manifest", json_output)
+            return
+    else:
+        targets = records
+
+    fetched = []
+    skipped = []
+    failed = []
+
+    for rec in targets:
+        dest = kb / rec.path
+        if dest.is_file() and not all_docs and not doc_id:
+            # Check hash of existing file
+            if content_hash(dest) == rec.hash:
+                skipped.append({"id": rec.id, "reason": "already present and hash matches"})
+                continue
+
+        target_url = rec.url
+        if not target_url and rec.doi:
+            target_url = f"https://doi.org/{rec.doi}"
+
+        if not target_url:
+            skipped.append({"id": rec.id, "reason": "no URL or DOI specified in manifest"})
+            continue
+
+        # If it's an arXiv abstract URL, translate to PDF URL for download
+        download_url = target_url
+        if "arxiv.org/abs/" in target_url:
+            download_url = target_url.replace("arxiv.org/abs/", "arxiv.org/pdf/") + ".pdf"
+
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            req = urllib.request.Request(
+                download_url,
+                headers={"User-Agent": "Mozilla/5.0 (yagrag-kb-fetch/0.1.0)"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+
+            # Verify checksum if manifest records a non-empty hash
+            computed_hash = hashlib.sha256(data).hexdigest()
+            hash_matches = (computed_hash == rec.hash) if rec.hash else True
+
+            dest.write_bytes(data)
+            if rec.kind == "raw":
+                dest.chmod(dest.stat().st_mode & 0o555)
+
+            status_entry = {
+                "id": rec.id,
+                "path": rec.path,
+                "url": download_url,
+                "bytes": len(data),
+                "hash_matches": hash_matches,
+            }
+            if not hash_matches:
+                status_entry["warning"] = f"hash mismatch: expected {rec.hash[:12]}..., got {computed_hash[:12]}..."
+
+            fetched.append(status_entry)
+        except Exception as exc:  # noqa: BLE001
+            failed.append({"id": rec.id, "url": download_url, "error": str(exc)})
+
+    result = {
+        "ok": len(failed) == 0,
+        "fetched": fetched,
+        "skipped": skipped,
+        "failed": failed,
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result, indent=2))
+    else:
+        if fetched:
+            _console.print(f"[green]fetched {len(fetched)} document(s):[/green]")
+            for item in fetched:
+                warn = f" [yellow]({item['warning']})[/yellow]" if "warning" in item else ""
+                _console.print(f"  + {item['id']}: {item['path']} ({item['bytes']} bytes){warn}")
+        if skipped:
+            _console.print(f"[dim]skipped {len(skipped)} document(s):[/dim]")
+            for item in skipped:
+                _console.print(f"  · {item['id']}: {item['reason']}")
+        if failed:
+            _console.print(f"[red]failed to fetch {len(failed)} document(s):[/red]")
+            for item in failed:
+                _console.print(f"  x {item['id']} ({item['url']}): {item['error']}")
+        if not fetched and not skipped and not failed:
+            _console.print("[yellow]no documents to fetch[/yellow]")
 
 
 @doc_app.command("show")

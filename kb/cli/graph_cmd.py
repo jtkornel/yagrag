@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import json as _json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -283,6 +284,245 @@ def cmd_export(
         g.close()
     payload = {"nodes": nodes, "relationships": rels}
     typer.echo(_json.dumps(payload, indent=2))
+
+
+@graph_app.command("dump")
+def cmd_dump(
+    output_file: Path = typer.Option(
+        Path("graph_dump.json.gz"),
+        "--output",
+        "-o",
+        help="Target dump path (.json or .json.gz).",
+    ),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Export property graph, claims, and migration metadata to a portable compressed dump file."""
+    import gzip
+    from ..schema.migrations import applied_migration_ids
+
+    try:
+        cfg = KBConfig.load(kb)
+    except Exception as exc:  # noqa: BLE001
+        _fail(str(exc), json_output)
+        return
+    g = _open_db(kb, json_output)
+    try:
+        # Collect nodes
+        nodes: dict[str, list[dict[str, Any]]] = {}
+        for table in g.node_table_names():
+            if table.startswith("_"):
+                continue
+            rows = g.execute(f"MATCH (n:{table}) RETURN n")
+            cleaned_rows: list[dict[str, Any]] = []
+            for r in rows:
+                n_val = r.get("n")
+                props: dict[str, Any] = n_val if isinstance(n_val, dict) else r
+                cleaned_rows.append({
+                    (k.split(".", 1)[-1] if "." in k else k): v
+                    for k, v in props.items()
+                    if not k.startswith("_")
+                })
+            nodes[table] = [_jsonable(r) for r in cleaned_rows]
+
+        # Collect relationships
+        rels: dict[str, list[dict[str, Any]]] = {}
+        for table in g.rel_table_names():
+            if table.startswith("_"):
+                continue
+            rows = g.execute(
+                f"MATCH (a)-[r:{table}]->(b) "
+                "RETURN labels(a)[0] AS from_label, a.id AS from_id, labels(b)[0] AS to_label, b.id AS to_id, r"
+            )
+            cleaned_rels: list[dict[str, Any]] = []
+            for r in rows:
+                from_label = r.get("from_label")
+                from_id = r.get("from_id")
+                to_label = r.get("to_label")
+                to_id = r.get("to_id")
+                r_val = r.get("r")
+                rel_props: dict[str, Any] = r_val if isinstance(r_val, dict) else r
+                rel_dict = {
+                    "from_label": from_label,
+                    "from_id": from_id,
+                    "to_label": to_label,
+                    "to_id": to_id,
+                }
+                for k, v in rel_props.items():
+                    k_clean = k.split(".", 1)[-1] if "." in k else k
+                    if not k_clean.startswith("_") and k_clean not in ("from_id", "to_id", "from_label", "to_label"):
+                        rel_dict[k_clean] = v
+                cleaned_rels.append(rel_dict)
+            rels[table] = [_jsonable(r) for r in cleaned_rels]
+
+        # Collect applied migrations
+        applied_migrations = applied_migration_ids(g)
+    except Exception as exc:  # noqa: BLE001
+        _fail(str(exc), json_output)
+        return
+    finally:
+        g.close()
+
+    total_nodes = sum(len(v) for v in nodes.values())
+    total_rels = sum(len(v) for v in rels.values())
+
+    payload = {
+        "version": 1,
+        "format_version": cfg.format_version,
+        "min_software_version": cfg.min_software_version,
+        "applied_migrations": applied_migrations,
+        "nodes": nodes,
+        "relationships": rels,
+    }
+
+    serialized = _json.dumps(payload, indent=2).encode("utf-8")
+    out_path = Path(output_file)
+    if out_path.suffix == ".gz":
+        with gzip.open(out_path, "wb") as f:
+            f.write(serialized)
+    else:
+        out_path.write_bytes(serialized)
+
+    result = {
+        "dump_file": str(out_path),
+        "nodes_count": total_nodes,
+        "relationships_count": total_rels,
+        "migrations_count": len(applied_migrations),
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+    else:
+        _console.print(
+            f"[green]graph dump created:[/green] {out_path} "
+            f"({total_nodes} nodes, {total_rels} relationships, {len(applied_migrations)} migrations)"
+        )
+
+
+@graph_app.command("restore")
+def cmd_restore(
+    input_file: Path = typer.Option(
+        Path("graph_dump.json.gz"),
+        "--input",
+        "-i",
+        help="Source dump file (.json or .json.gz).",
+    ),
+    kb: Path = _KB_OPT,
+    apply_schema: bool = typer.Option(
+        True,
+        "--apply-schema/--no-apply-schema",
+        help="Apply pending migrations before restoring nodes and relationships.",
+    ),
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Restore property graph, claims, and schema from a portable dump file."""
+    import gzip
+    from ..schema.migrations import apply_migrations, MIGRATIONS_TABLE
+
+    src_path = Path(input_file)
+    if not src_path.is_file():
+        _fail(f"dump file not found: {src_path}", json_output)
+        return
+
+    try:
+        if src_path.suffix == ".gz":
+            with gzip.open(src_path, "rb") as f:
+                data = _json.loads(f.read().decode("utf-8"))
+        else:
+            data = _json.loads(src_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        _fail(f"failed to read dump file: {exc}", json_output)
+        return
+
+    try:
+        cfg = KBConfig.load(kb)
+    except Exception as exc:  # noqa: BLE001
+        _fail(str(exc), json_output)
+        return
+
+    # Check dump version compatibility if present
+    dump_min_sw = data.get("min_software_version")
+    if dump_min_sw:
+        from ..config import _parse_semver
+        from .. import __version__ as current_sw_version
+        if _parse_semver(dump_min_sw) > _parse_semver(current_sw_version):
+            _fail(
+                f"Dump requires yagrag/kb >= {dump_min_sw} (found {current_sw_version}). "
+                "Please update your yagrag installation.",
+                json_output,
+            )
+            return
+
+    # Apply schema migrations if requested
+    migrations_dir = kb / cfg.paths.schema_dir / "migrations"
+    g = _open_db(kb, json_output)
+    try:
+        if apply_schema and migrations_dir.is_dir():
+            apply_migrations(g, migrations_dir)
+
+        # Restore migration records if any are in the dump
+        applied_in_dump = data.get("applied_migrations") or []
+        for mid in applied_in_dump:
+            with contextlib.suppress(Exception):
+                g.execute(
+                    f"CREATE (:{MIGRATIONS_TABLE} {{id: $id, applied_at: current_timestamp()}})",
+                    {"id": mid},
+                )
+
+        nodes_dict: dict[str, list[dict[str, Any]]] = data.get("nodes") or {}
+        rels_dict: dict[str, list[dict[str, Any]]] = data.get("relationships") or {}
+
+        # 1. Restore nodes
+        total_nodes = 0
+        from ..graph.upsert import upsert_node
+        for label, items in nodes_dict.items():
+            for item in items:
+                props = dict(item)
+                upsert_node(g, label, props)
+                total_nodes += 1
+
+        # 2. Restore relationships
+        total_rels = 0
+        from ..graph.upsert import upsert_edge
+        for rel_type, items in rels_dict.items():
+            for item in items:
+                props = dict(item)
+                from_id = props.pop("from_id", None)
+                to_id = props.pop("to_id", None)
+                from_label = props.pop("from_label", None)
+                to_label = props.pop("to_label", None)
+
+                # Fallback label lookup if not present in legacy dumps
+                if not from_label or not to_label:
+                    for l, node_list in nodes_dict.items():
+                        for n in node_list:
+                            if n.get("id") == from_id and not from_label:
+                                from_label = l
+                            if n.get("id") == to_id and not to_label:
+                                to_label = l
+
+                if from_id and to_id and from_label and to_label:
+                    upsert_edge(g, rel_type, str(from_label), str(from_id), str(to_label), str(to_id), props)
+                    total_rels += 1
+    except Exception as exc:  # noqa: BLE001
+        _fail(f"restore failed: {exc}", json_output)
+        return
+    finally:
+        g.close()
+
+    result = {
+        "restored_from": str(src_path),
+        "nodes_restored": total_nodes,
+        "relationships_restored": total_rels,
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result))
+    else:
+        _console.print(
+            f"[green]graph restore complete:[/green] restored from {src_path} "
+            f"({total_nodes} nodes, {total_rels} relationships)"
+        )
 
 
 @graph_app.command("batch")

@@ -5,7 +5,7 @@ It is intentionally LLM-free; all reasoning lives in the agent layer
 (`.agents/skills/`) which invokes this CLI.
 """
 
-from .config import KBConfig
+from .config import CURRENT_FORMAT_VERSION, IncompatibleKBVersionError, KBConfig
 from .graph import (
     GraphDB,
     GraphEngineNotInstalled,
@@ -21,9 +21,11 @@ from .graph import (
 
 __version__ = "0.1.0"
 __all__ = [
+    "CURRENT_FORMAT_VERSION",
     "GraphDB",
     "GraphEngineNotInstalled",
     "GraphWriteError",
+    "IncompatibleKBVersionError",
     "KBConfig",
     "ProvenanceError",
     "TraverseNotInstalled",

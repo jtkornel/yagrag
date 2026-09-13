@@ -115,10 +115,25 @@ class SchemaCompanion:
 
     # --- validation ----------------------------------------------------------
 
-    def validate_against_schema(self, node_names: list[str], edge_names: list[str]) -> list[str]:
+    def merge(self, other: SchemaCompanion) -> SchemaCompanion:
+        """Merge another companion into this one.
+
+        Values from `other` override or extend definitions in `self`.
+        """
+        merged_nodes = dict(self.nodes)
+        merged_nodes.update(other.nodes)
+        merged_edges = dict(self.edges)
+        merged_edges.update(other.edges)
+        return SchemaCompanion(nodes=merged_nodes, edges=merged_edges)
+
+    def validate_against_schema(
+        self, node_names: list[str], edge_names: list[str], allow_domain_extensions: bool = True
+    ) -> list[str]:
         """Check consistency between the companion and the structural schema.
 
         Returns a list of human-readable issues (empty when consistent).
+        If `allow_domain_extensions` is True, extra node or edge types in the GQL
+        schema that have no companion metadata are permitted (non-fatal extension).
         """
         issues: list[str] = []
         node_set, edge_set = set(node_names), set(edge_names)
@@ -135,12 +150,13 @@ class SchemaCompanion:
             if name not in node_set:
                 issues.append(f"node {name}: companion entry has no matching GQL node type")
 
-        undocumented = sorted(n for n in edge_set if n not in self.edges)
-        if undocumented:
-            issues.append(f"GQL edge types missing companion entries: {', '.join(undocumented)}")
-        undocumented_nodes = sorted(n for n in node_set if n not in self.nodes and not n.startswith("_"))
-        if undocumented_nodes:
-            issues.append(f"GQL node types missing companion entries: {', '.join(undocumented_nodes)}")
+        if not allow_domain_extensions:
+            undocumented = sorted(n for n in edge_set if n not in self.edges)
+            if undocumented:
+                issues.append(f"GQL edge types missing companion entries: {', '.join(undocumented)}")
+            undocumented_nodes = sorted(n for n in node_set if n not in self.nodes and not n.startswith("_"))
+            if undocumented_nodes:
+                issues.append(f"GQL node types missing companion entries: {', '.join(undocumented_nodes)}")
         return issues
 
 

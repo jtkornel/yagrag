@@ -69,9 +69,10 @@ class DocumentRecord:
     tags: tuple[str, ...] = ()
     notes: str = ""
     url: str = ""
+    doi: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "id": self.id,
             "kind": self.kind,
             "title": self.title,
@@ -84,6 +85,9 @@ class DocumentRecord:
             "notes": self.notes,
             "url": self.url,
         }
+        if self.doi:
+            d["doi"] = self.doi
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DocumentRecord:
@@ -99,6 +103,7 @@ class DocumentRecord:
             tags=tuple(d.get("tags", [])),
             notes=d.get("notes", ""),
             url=d.get("url", ""),
+            doi=d.get("doi", ""),
         )
 
 
@@ -183,6 +188,7 @@ class DocumentStore:
         tags: list[str] | None = None,
         notes: str = "",
         url: str = "",
+        doi: str = "",
     ) -> DocumentRecord:
         """Ingest `source` as a document of `kind`. Returns the new record.
 
@@ -240,6 +246,7 @@ class DocumentStore:
             tags=tuple(tags or []),
             notes=notes,
             url=url,
+            doi=doi,
         )
         # Sidecar metadata next to the stored file (self-describing tree).
         meta_path = dest.with_name(dest.name + ".meta.json")
@@ -251,6 +258,29 @@ class DocumentStore:
         manifest["documents"].append(record.to_dict())
         self._save_manifest(manifest)
         return record
+
+    def update_record(self, doc_id: str, **fields: Any) -> DocumentRecord:
+        """Update metadata fields of an existing document in the manifest."""
+        manifest = self._load_manifest()
+        updated = None
+        for i, doc in enumerate(manifest["documents"]):
+            if doc["id"] == doc_id:
+                for k, v in fields.items():
+                    doc[k] = v
+                manifest["documents"][i] = doc
+                updated = DocumentRecord.from_dict(doc)
+                break
+        if updated is None:
+            raise StoreError(f"no document with id {doc_id!r}")
+        self._save_manifest(manifest)
+        # Update sidecar metadata if file exists
+        dest = self.kb_root / updated.path
+        meta_path = dest.with_name(dest.name + ".meta.json")
+        if meta_path.parent.exists():
+            meta_path.write_text(
+                json.dumps(updated.to_dict(), indent=2) + "\n", encoding="utf-8"
+            )
+        return updated
 
     # --- remove ----------------------------------------------------------------
 
