@@ -1,6 +1,6 @@
 """Extract MathModDB ontology structure (classes, properties, labels) from the OWL export."""
 import rdflib
-from rdflib.namespace import RDF, RDFS, OWL
+from rdflib.namespace import OWL, RDF, RDFS
 
 g = rdflib.Graph()
 g.parse("docs/mardi/MathModDB.owl", format="xml")
@@ -37,6 +37,7 @@ for p in sorted(g.subjects(RDF.type, OWL.DatatypeProperty)):
 
 print("\n=== INDIVIDUAL COUNTS PER CLASS ===")
 from collections import Counter
+
 cnt = Counter()
 for s, o in g.subject_objects(RDF.type):
     if (o, RDF.type, OWL.Class) in g:

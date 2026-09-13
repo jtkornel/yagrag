@@ -92,7 +92,6 @@ def handle_clone(
         return
 
     # If dump file is present and restore_dump is True, restore the graph automatically
-    restored = False
     dump_path = dest_dir / "graph_dump.json.gz"
     if not dump_path.is_file():
         dump_path = dest_dir / "graph_dump.json"
@@ -104,7 +103,6 @@ def handle_clone(
             from .graph_cmd import cmd_restore
             with contextlib.suppress(Exception):
                 cmd_restore(input_file=dump_path, kb=dest_dir, apply_schema=True, json_output=json_output)
-                restored = True
 
     result: dict[str, Any] = {
         "ok": True,

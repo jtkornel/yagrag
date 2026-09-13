@@ -258,6 +258,7 @@ def cmd_fetch(
     """Download raw document files from URLs recorded in manifest.json and verify SHA-256."""
     import hashlib
     import urllib.request
+
     from ..store.documents import content_hash
 
     store = _open_store(kb, json_output)
@@ -277,11 +278,9 @@ def cmd_fetch(
 
     for rec in targets:
         dest = kb / rec.path
-        if dest.is_file() and not all_docs and not doc_id:
-            # Check hash of existing file
-            if content_hash(dest) == rec.hash:
-                skipped.append({"id": rec.id, "reason": "already present and hash matches"})
-                continue
+        if dest.is_file() and not all_docs and not doc_id and content_hash(dest) == rec.hash:
+            skipped.append({"id": rec.id, "reason": "already present and hash matches"})
+            continue
 
         target_url = rec.url
         if not target_url and rec.doi:

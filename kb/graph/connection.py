@@ -151,7 +151,7 @@ class GraphDB:
             # GQL-first: try GQL dialect, fallback to default Cypher if GQL rejects syntax
             try:
                 res = tx.execute(query, clean_params, dialect="gql")
-            except Exception:
+            except Exception:  # noqa: BLE001
                 res = tx.execute(query, clean_params)
 
             tx.commit()

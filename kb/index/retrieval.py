@@ -174,7 +174,7 @@ def _entity_details(g: GraphDB, label: str, entity_id: str) -> dict[str, Any]:
             "cl.sources AS sources, cl.confidence AS confidence",
             {"id": entity_id},
         )
-    except (RuntimeError, Exception):
+    except Exception:  # noqa: BLE001
         claims = []  # no Claim/ABOUT tables in this schema
     detail["claims"] = claims
 

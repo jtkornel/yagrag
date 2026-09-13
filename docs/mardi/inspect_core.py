@@ -1,6 +1,6 @@
 """Show the core MathModDB relation properties in detail + a sample model individual."""
 import rdflib
-from rdflib.namespace import RDF, RDFS, OWL
+from rdflib.namespace import RDF, RDFS
 
 g = rdflib.Graph()
 g.parse("docs/mardi/MathModDB.owl", format="xml")
@@ -22,6 +22,7 @@ for pid in CORE:
 
 # find a well-connected mathematical model and dump it fully
 from collections import Counter
+
 deg = Counter()
 for s, p, o in g:
     if (s, RDF.type, rdflib.URIRef(base+'Q68663')) in g:

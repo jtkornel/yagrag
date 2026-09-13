@@ -1,7 +1,8 @@
 """Dump all property usage in MathModDB: which P-properties connect which entity types."""
-import rdflib
-from rdflib.namespace import RDF, RDFS, OWL
 from collections import Counter, defaultdict
+
+import rdflib
+from rdflib.namespace import RDF, RDFS
 
 g = rdflib.Graph()
 g.parse("docs/mardi/MathModDB.owl", format="xml")

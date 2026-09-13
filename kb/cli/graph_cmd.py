@@ -299,6 +299,7 @@ def cmd_dump(
 ) -> None:
     """Export property graph, claims, and migration metadata to a portable compressed dump file."""
     import gzip
+
     from ..schema.migrations import applied_migration_ids
 
     try:
@@ -417,7 +418,8 @@ def cmd_restore(
 ) -> None:
     """Restore property graph, claims, and schema from a portable dump file."""
     import gzip
-    from ..schema.migrations import apply_migrations, MIGRATIONS_TABLE
+
+    from ..schema.migrations import MIGRATIONS_TABLE, apply_migrations
 
     src_path = Path(input_file)
     if not src_path.is_file():
@@ -443,8 +445,8 @@ def cmd_restore(
     # Check dump version compatibility if present
     dump_min_sw = data.get("min_software_version")
     if dump_min_sw:
-        from ..config import _parse_semver
         from .. import __version__ as current_sw_version
+        from ..config import _parse_semver
         if _parse_semver(dump_min_sw) > _parse_semver(current_sw_version):
             _fail(
                 f"Dump requires yagrag/kb >= {dump_min_sw} (found {current_sw_version}). "
@@ -739,7 +741,6 @@ def cmd_lint(
                 latex = eq["latex"] or ""
                 if not latex:
                     continue
-                clean_latex = latex.replace("\\", "").strip()
 
                 from ..code.checker import symbol_matches_candidate
 

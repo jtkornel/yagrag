@@ -401,7 +401,7 @@ def _normalize_math_symbol_variants(s: str) -> set[str]:
             variants.add(clean_no_sub.replace(g_from, g_to))
 
     # Time-index / step aliases: e.g. k-1, i-1 <-> prev; k+1, i+1 <-> next
-    for v in list(variants):
+    for v in variants:
         if "-1" in v or "_1" in v:
             variants.add(re.sub(r"[_\-]1$", "_prev", v))
             variants.add(re.sub(r"[a-z0-9]+[_\-]1$", "prev", v))

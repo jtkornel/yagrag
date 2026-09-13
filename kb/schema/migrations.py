@@ -269,9 +269,8 @@ def build_target_schema(migrations_dir: Path) -> Schema:
                     nodes[op.table.name] = op.table
                 elif isinstance(op, CreateRelOp):
                     edges[op.table.name] = op.table
-                elif isinstance(op, AddRelPairOp):
-                    if op.table in edges:
-                        edges[op.table].pairs.append(RelPair(**{"from": op.from_, "to": op.to}))
+                elif isinstance(op, AddRelPairOp) and op.table in edges:
+                    edges[op.table].pairs.append(RelPair(**{"from": op.from_, "to": op.to}))
 
     return Schema(node_types=list(nodes.values()), relation_types=list(edges.values()))
 

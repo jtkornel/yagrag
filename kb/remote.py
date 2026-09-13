@@ -42,15 +42,13 @@ def clone_kb(url: str, dest_dir: Path | None = None) -> Path:
     """Clone a knowledge base Git repository from a URL or GitHub shorthand (owner/repo)."""
     # Expand GitHub shorthand like "user/repo" into full git URL
     target_url = url
-    if not (url.startswith("http://") or url.startswith("https://") or url.startswith("git@") or url.startswith("ssh://") or Path(url).exists()):
-        if "/" in url and not url.startswith("."):
-            target_url = f"https://github.com/{url}.git"
+    if not (url.startswith(("http://", "https://", "git@", "ssh://")) or Path(url).exists()) and "/" in url and not url.startswith("."):
+        target_url = f"https://github.com/{url}.git"
 
     if dest_dir is None:
         # Determine name from URL
         stem = target_url.rstrip("/").split("/")[-1]
-        if stem.endswith(".git"):
-            stem = stem[:-4]
+        stem = stem.removesuffix(".git")
         dest_dir = Path.cwd() / stem
 
     dest_dir = Path(dest_dir).resolve()

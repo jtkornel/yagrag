@@ -1,5 +1,7 @@
 # yagrag - Yet Another GraphRAG knowledge base
 
+[![CI](https://github.com/jtkornel/yagrag/actions/workflows/ci.yml/badge.svg)](https://github.com/jtkornel/yagrag/actions/workflows/ci.yml)
+
 A **lightweight, local-first GraphRAG system** for building and maintaining
 *domain-specific property-graph databases and document collections*.
 

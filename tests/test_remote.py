@@ -27,7 +27,7 @@ def test_config_version_compatibility(tmp_path: Path) -> None:
     # Write a future format version to kb.toml
     config_file = tmp_path / CONFIG_FILENAME
     config_file.write_text(
-        f'version = 1\nformat_version = 999\nmin_software_version = "0.1.0"\nname = "future_kb"\n',
+        'version = 1\nformat_version = 999\nmin_software_version = "0.1.0"\nname = "future_kb"\n',
         encoding="utf-8",
     )
     with pytest.raises(IncompatibleKBVersionError, match="format version 999"):
@@ -35,7 +35,7 @@ def test_config_version_compatibility(tmp_path: Path) -> None:
 
     # Write a future software version requirement
     config_file.write_text(
-        f'version = 1\nformat_version = 1\nmin_software_version = "99.0.0"\nname = "future_sw"\n',
+        'version = 1\nformat_version = 1\nmin_software_version = "99.0.0"\nname = "future_sw"\n',
         encoding="utf-8",
     )
     with pytest.raises(IncompatibleKBVersionError, match="requires yagrag/kb >= 99.0.0"):
@@ -65,7 +65,7 @@ def test_dump_and_restore_roundtrip(tmp_path: Path) -> None:
             "--kb",
             str(src_kb),
             "--props",
-            '{"id": "doc1", "title": "Test Doc", "origin": "human", "sources": ["doc1"]}',
+            '{"id": "doc1", "title": "Test Doc", "origin": "raw", "sources": ["doc1"]}',
         ],
     )
     assert res_node1.exit_code == 0
@@ -79,7 +79,7 @@ def test_dump_and_restore_roundtrip(tmp_path: Path) -> None:
             "--kb",
             str(src_kb),
             "--props",
-            '{"id": "c1", "name": "Kinematics", "origin": "human", "sources": ["doc1"]}',
+            '{"id": "c1", "name": "Kinematics", "origin": "raw", "sources": ["doc1"]}',
         ],
     )
     assert res_node2.exit_code == 0
@@ -105,8 +105,8 @@ def test_dump_and_restore_roundtrip(tmp_path: Path) -> None:
     )
     assert res_query.exit_code == 0
     data = json.loads(res_query.stdout)
-    # Traverse may return dict row or dict with n
-    row = data[0]
+    rows = data.get("rows", data)
+    row = rows[0]
     title = row.get("title") or (row.get("d") or {}).get("title")
     assert title == "Test Doc"
 
