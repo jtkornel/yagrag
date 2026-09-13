@@ -315,18 +315,18 @@ def seeded_math_kb(tmp_path: Path) -> Path:
     return kb_dir
 
 
-def test_cli_math_derive_quantity_symbol_and_id(seeded_math_kb: Path) -> None:
-    # 1. Derive by symbol name
-    res = runner.invoke(app, ["math", "derive", "omega_z", "--kb", str(seeded_math_kb)])
+def test_cli_math_show_quantity_symbol_and_id(seeded_math_kb: Path) -> None:
+    # 1. Show by symbol name
+    res = runner.invoke(app, ["math", "show", "omega_z", "--kb", str(seeded_math_kb)])
     assert res.exit_code == 0, res.output
     assert "ω_z" in res.stdout
     assert "ICR Forward Kinematics" in res.stdout
     assert "Input Symbols" in res.stdout
 
-    # 2. Derive by node ID with --json (depth=1)
+    # 2. Show by node ID with --json (depth=1)
     res_json = runner.invoke(
         app,
-        ["math", "derive", "qty_raw0010_omega_z", "--kb", str(seeded_math_kb), "--json"],
+        ["math", "show", "qty_raw0010_omega_z", "--kb", str(seeded_math_kb), "--json"],
     )
     assert res_json.exit_code == 0, res_json.output
     data = json.loads(res_json.stdout)
@@ -338,11 +338,11 @@ def test_cli_math_derive_quantity_symbol_and_id(seeded_math_kb: Path) -> None:
     assert len(data["results"][0]["derivations"][0]["inputs"]) == 6
 
 
-def test_cli_math_derive_multi_depth(seeded_math_kb: Path) -> None:
-    # Derive with depth=2 to trace upstream definitions of Y_l and Y_r
+def test_cli_math_show_multi_depth(seeded_math_kb: Path) -> None:
+    # Show with depth=2 to trace upstream definitions of Y_l and Y_r
     res_json = runner.invoke(
         app,
-        ["math", "derive", "qty_raw0010_omega_z", "--depth", "2", "--kb", str(seeded_math_kb), "--json"],
+        ["math", "show", "qty_raw0010_omega_z", "--depth", "2", "--kb", str(seeded_math_kb), "--json"],
     )
     assert res_json.exit_code == 0, res_json.output
     data = json.loads(res_json.stdout)
@@ -354,18 +354,18 @@ def test_cli_math_derive_multi_depth(seeded_math_kb: Path) -> None:
     # Human readable output with depth=2
     res = runner.invoke(
         app,
-        ["math", "derive", "qty_raw0010_omega_z", "--depth", "2", "--kb", str(seeded_math_kb)],
+        ["math", "show", "qty_raw0010_omega_z", "--depth", "2", "--kb", str(seeded_math_kb)],
     )
     assert res.exit_code == 0, res.output
-    assert "Upstream for" in res.stdout
+    assert "Expressed by (Yₗ):" in res.stdout
     assert "eq_track_width_init" in res.stdout
 
 
-def test_cli_math_derive_equation(seeded_math_kb: Path) -> None:
+def test_cli_math_show_equation(seeded_math_kb: Path) -> None:
     # JSON mode
     res = runner.invoke(
         app,
-        ["math", "derive", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb), "--json"],
+        ["math", "show", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb), "--json"],
     )
     assert res.exit_code == 0, res.output
     data = json.loads(res.stdout)
@@ -377,29 +377,29 @@ def test_cli_math_derive_equation(seeded_math_kb: Path) -> None:
     # Human-readable mode (default: SymPy 2D rendered, no raw LaTeX)
     res_hr = runner.invoke(
         app,
-        ["math", "derive", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb)],
+        ["math", "show", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb)],
     )
     assert res_hr.exit_code == 0, res_hr.output
     assert "ICR Forward Kinematics" in res_hr.stdout
     assert "SymPy 2D" in res_hr.stdout
-    assert "Defined Output(s):" in res_hr.stdout
+    assert "Expressed Output(s):" in res_hr.stdout
     assert r"\frac" not in res_hr.stdout
 
     # Human-readable mode with --latex
     res_latex = runner.invoke(
         app,
-        ["math", "derive", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb), "--latex"],
+        ["math", "show", "eq_skid_steer_forward_kinematics", "--kb", str(seeded_math_kb), "--latex"],
     )
     assert res_latex.exit_code == 0, res_latex.output
     assert "LaTeX:" in res_latex.stdout
     assert r"\frac" in res_latex.stdout
 
 
-def test_cli_math_derive_model(seeded_math_kb: Path) -> None:
+def test_cli_math_show_model(seeded_math_kb: Path) -> None:
     # JSON mode
     res = runner.invoke(
         app,
-        ["math", "derive", "model_skid_steer_icr", "--kb", str(seeded_math_kb), "--json"],
+        ["math", "show", "model_skid_steer_icr", "--kb", str(seeded_math_kb), "--json"],
     )
     assert res.exit_code == 0, res.output
     data = json.loads(res.stdout)
@@ -410,17 +410,17 @@ def test_cli_math_derive_model(seeded_math_kb: Path) -> None:
     # Human-readable mode
     res_hr = runner.invoke(
         app,
-        ["math", "derive", "model_skid_steer_icr", "--kb", str(seeded_math_kb)],
+        ["math", "show", "model_skid_steer_icr", "--kb", str(seeded_math_kb)],
     )
     assert res_hr.exit_code == 0, res_hr.output
     assert "Model Derivation" in res_hr.stdout
     assert "Equation:" in res_hr.stdout
 
 
-def test_cli_math_derive_not_found(seeded_math_kb: Path) -> None:
+def test_cli_math_show_not_found(seeded_math_kb: Path) -> None:
     res = runner.invoke(
         app,
-        ["math", "derive", "nonexistent_symbol", "--kb", str(seeded_math_kb), "--json"],
+        ["math", "show", "nonexistent_symbol", "--kb", str(seeded_math_kb), "--json"],
     )
     assert res.exit_code != 0
     data = json.loads(res.stdout)

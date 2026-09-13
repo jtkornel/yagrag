@@ -360,6 +360,34 @@ def test_unknown_language_is_unchecked(kb_root: Path) -> None:
     assert entry["status"] == STATUS_UNCHECKED
 
 
+def test_extract_sympy_equation_roles_equalities_and_inequalities() -> None:
+    from kb.code.checker import extract_sympy_equation_roles
+
+    # 1. Explicit equality
+    lhs, rhs, errs = extract_sympy_equation_roles("Eq(T_r, f_r * F_z * r)\n")
+    assert not errs
+    assert lhs == {"T_r"}
+    assert rhs == {"f_r", "F_z", "r"}
+
+    # 2. Inequality
+    lhs_ineq, rhs_ineq, errs_ineq = extract_sympy_equation_roles("Le(x, x_max)\n")
+    assert not errs_ineq
+    assert lhs_ineq == set()
+    assert rhs_ineq == {"x", "x_max"}
+
+    # 3. Multi-line system with local intermediate
+    source = (
+        "Eq(r_m, Sum(gamma_m, (n, 1, N)))\n"
+        "Eq(pi_m, r_m / N)\n"
+    )
+    lhs_multi, rhs_multi, errs_multi = extract_sympy_equation_roles(source)
+    assert not errs_multi
+    assert lhs_multi == {"r_m", "pi_m"}
+    assert "r_m" not in rhs_multi
+    assert "gamma_m" in rhs_multi
+    assert "N" in rhs_multi
+
+
 def test_editing_the_file_marks_the_status_stale(kb_root: Path) -> None:
     rel = _write_code(kb_root, "algorithms/edited.py", GOOD_PYTHON)
     _upsert(

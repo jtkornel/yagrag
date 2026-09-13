@@ -501,6 +501,22 @@ def cmd_lint(
                     continue
                 clean_latex = latex.replace("\\", "").strip()
 
+                from ..code.checker import symbol_matches_candidate
+
+                def _symbol_in_latex(symbol_str: str, latex_formula: str) -> bool:
+                    if not symbol_str:
+                        return False
+                    clean_s = symbol_str.replace("\\", "").strip()
+                    clean_f = latex_formula.replace("\\", "").strip()
+                    if clean_s in clean_f or symbol_matches_candidate(symbol_str, latex_formula):
+                        return True
+                    latex_no_braces = latex_formula.replace("{", "").replace("}", "")
+                    if clean_s in latex_no_braces.replace("\\", "") or symbol_matches_candidate(symbol_str, latex_no_braces):
+                        return True
+                    # Check tokenized subwords
+                    tokens = [t for t in re.split(r"[^a-zA-Z0-9_]+", latex_no_braces) if t]
+                    return any(symbol_matches_candidate(symbol_str, t) for t in tokens)
+
                 if "USES_SYMBOL" in rel_tables:
                     symbols = g.execute(
                         "MATCH (e:Equation {id: $id})-[:USES_SYMBOL]->(q) RETURN q.id AS qid, q.symbol AS symbol",
@@ -508,8 +524,7 @@ def cmd_lint(
                     )
                     for s in symbols:
                         sym = s["symbol"] or ""
-                        clean_sym = sym.replace("\\", "").strip()
-                        if clean_sym and clean_sym not in clean_latex:
+                        if sym and not _symbol_in_latex(sym, latex):
                             issues.append(
                                 {
                                     "category": "symbolic_consistency",
@@ -528,8 +543,7 @@ def cmd_lint(
                         )
                         for s in lhs_nodes:
                             sym = s["symbol"] or ""
-                            clean_sym = sym.replace("\\", "").strip()
-                            if clean_sym and clean_sym not in clean_latex:
+                            if sym and not _symbol_in_latex(sym, latex):
                                 issues.append(
                                     {
                                         "category": "symbolic_consistency",
@@ -539,6 +553,176 @@ def cmd_lint(
                                         "message": f"Equation {eqid} linked via {rel_name} to quantity {s['qid']} ({sym!r}) but symbol does not appear in LaTeX formula {latex!r}.",
                                     }
                                 )
+
+        # 4b. Two-Way SymPy vs Graph Audit (LHS/RHS role matching & completeness)
+        if "Equation" in node_tables:
+            from ..code.checker import extract_sympy_equation_roles, symbol_matches_candidate
+
+            eq_code_rows = g.execute(
+                "MATCH (e:Equation) WHERE e.code_path IS NOT NULL AND e.code_path <> '' "
+                "RETURN e.id AS id, e.code_path AS code_path, e.code_language AS code_language"
+            )
+            for eq in eq_code_rows:
+                eqid = eq["id"]
+                code_path_str = eq.get("code_path")
+                if not code_path_str:
+                    continue
+                file_path = kb / code_path_str
+                if not file_path.is_file() or file_path.suffix.lower() != ".sympy":
+                    continue
+
+                try:
+                    source = file_path.read_text(encoding="utf-8")
+                except OSError:
+                    continue
+
+                lhs_syms, rhs_syms, parse_errs = extract_sympy_equation_roles(source)
+                if parse_errs:
+                    continue
+
+                # Query existing graph edges connected to this equation (specifically for Quantity/Variable)
+                expressed_rows = g.execute(
+                    "MATCH (q:Quantity)-[:EXPRESSED_BY]->(e:Equation {id: $id}) "
+                    "RETURN q.id AS qid, q.name AS name, q.symbol AS symbol",
+                    {"id": eqid},
+                ) if "EXPRESSED_BY" in rel_tables else []
+
+                defined_rows = g.execute(
+                    "MATCH (q:Quantity)-[:DEFINED_BY]->(e:Equation {id: $id}) "
+                    "RETURN q.id AS qid, q.name AS name, q.symbol AS symbol",
+                    {"id": eqid},
+                ) if "DEFINED_BY" in rel_tables else []
+
+                used_rows = g.execute(
+                    "MATCH (e:Equation {id: $id})-[:USES_SYMBOL]->(q:Quantity) "
+                    "RETURN q.id AS qid, q.name AS name, q.symbol AS symbol",
+                    {"id": eqid},
+                ) if "USES_SYMBOL" in rel_tables else []
+
+                def _matches_any(target_sym: str, nodes: list[dict[str, Any]]) -> dict[str, Any] | None:
+                    for n in nodes:
+                        cands = [str(n.get("symbol") or ""), str(n.get("id") or ""), str(n.get("name") or "")]
+                        if any(symbol_matches_candidate(target_sym, c) for c in cands if c):
+                            return n
+                    return None
+
+                def _find_matching_sym(q_node: dict[str, Any], sym_set: set[str]) -> str | None:
+                    cands = [str(q_node.get("symbol") or ""), str(q_node.get("id") or ""), str(q_node.get("name") or "")]
+                    for sym in sym_set:
+                        if any(symbol_matches_candidate(sym, c) for c in cands if c):
+                            return sym
+                    return None
+
+                # 1. SymPy LHS -> Graph: must have EXPRESSED_BY
+                for l_sym in lhs_syms:
+                    matched_exp = _matches_any(l_sym, expressed_rows)
+                    if not matched_exp:
+                        issues.append(
+                            {
+                                "category": "symbolic_consistency",
+                                "severity": "warning",
+                                "id": eqid,
+                                "node_type": "Equation",
+                                "message": f"Equation {eqid} defines LHS output {l_sym!r} in SymPy, but is missing required incoming edge (Quantity)-[:EXPRESSED_BY]->(Equation:{eqid}).",
+                            }
+                        )
+
+                # 2. SymPy RHS -> Graph: must have USES_SYMBOL
+                for r_sym in rhs_syms:
+                    matched_used = _matches_any(r_sym, used_rows)
+                    if not matched_used:
+                        issues.append(
+                            {
+                                "category": "symbolic_consistency",
+                                "severity": "warning",
+                                "id": eqid,
+                                "node_type": "Equation",
+                                "message": f"Equation {eqid} uses free symbol {r_sym!r} in SymPy, but is missing edge (Equation:{eqid})-[:USES_SYMBOL]->(Quantity).",
+                            }
+                        )
+
+                # 3. Graph EXPRESSED_BY -> SymPy: must be on LHS
+                for row in expressed_rows:
+                    qid = row["qid"]
+                    sym = row.get("symbol") or qid
+                    matched_lhs = _find_matching_sym(row, lhs_syms)
+                    if not matched_lhs:
+                        matched_rhs = _find_matching_sym(row, rhs_syms)
+                        if matched_rhs:
+                            issues.append(
+                                {
+                                    "category": "symbolic_consistency",
+                                    "severity": "warning",
+                                    "id": eqid,
+                                    "node_type": "Equation",
+                                    "message": f"Quantity {qid} ({sym!r}) is linked via EXPRESSED_BY to Equation {eqid}, but appears on the RHS in SymPy (expected USES_SYMBOL).",
+                                }
+                            )
+                        else:
+                            issues.append(
+                                {
+                                    "category": "symbolic_consistency",
+                                    "severity": "warning",
+                                    "id": eqid,
+                                    "node_type": "Equation",
+                                    "message": f"Quantity {qid} ({sym!r}) is linked via EXPRESSED_BY to Equation {eqid}, but does not appear in SymPy file {code_path_str!r}.",
+                                }
+                            )
+
+                # 4. Graph DEFINED_BY -> SymPy / Graph: DEFINED_BY is an optional refinement on LHS
+                for row in defined_rows:
+                    qid = row["qid"]
+                    sym = row.get("symbol") or qid
+                    matched_lhs = _find_matching_sym(row, lhs_syms)
+                    if not matched_lhs:
+                        issues.append(
+                            {
+                                "category": "symbolic_consistency",
+                                "severity": "warning",
+                                "id": eqid,
+                                "node_type": "Equation",
+                                "message": f"Quantity {qid} ({sym!r}) is linked via DEFINED_BY to Equation {eqid}, but does not appear as LHS output in SymPy file {code_path_str!r}.",
+                            }
+                        )
+                    # Also check: DEFINED_BY refining edge requires EXPRESSED_BY
+                    if not any(exp_row["qid"] == qid for exp_row in expressed_rows):
+                        issues.append(
+                            {
+                                "category": "symbolic_consistency",
+                                "severity": "warning",
+                                "id": eqid,
+                                "node_type": "Equation",
+                                "message": f"Quantity {qid} is linked via DEFINED_BY to Equation {eqid} without the mandatory EXPRESSED_BY edge.",
+                            }
+                        )
+
+                # 5. Graph USES_SYMBOL -> SymPy: must be on RHS / input
+                for row in used_rows:
+                    qid = row["qid"]
+                    sym = row.get("symbol") or qid
+                    matched_rhs = _find_matching_sym(row, rhs_syms)
+                    if not matched_rhs:
+                        matched_lhs = _find_matching_sym(row, lhs_syms)
+                        if matched_lhs:
+                            issues.append(
+                                {
+                                    "category": "symbolic_consistency",
+                                    "severity": "warning",
+                                    "id": eqid,
+                                    "node_type": "Equation",
+                                    "message": f"Quantity {qid} ({sym!r}) is linked via USES_SYMBOL from Equation {eqid}, but is the isolated LHS output in SymPy (expected EXPRESSED_BY).",
+                                }
+                            )
+                        else:
+                            issues.append(
+                                {
+                                    "category": "symbolic_consistency",
+                                    "severity": "warning",
+                                    "id": eqid,
+                                    "node_type": "Equation",
+                                    "message": f"Quantity {qid} ({sym!r}) is linked via USES_SYMBOL from Equation {eqid}, but does not appear in SymPy file {code_path_str!r}.",
+                                }
+                            )
 
         # 5. Acronym node audit
         if "Acronym" in node_tables:

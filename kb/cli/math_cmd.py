@@ -1,6 +1,6 @@
-"""`kb math` command group: derive | glossary.
+"""`kb math` command group: show | glossary.
 
-Mathematical derivation tracing, symbolic rendering, and glossaries.
+Mathematical inspection, symbolic equation tracing, and glossaries.
 """
 
 from __future__ import annotations
@@ -199,7 +199,7 @@ def _trace_quantity_derivations(
     depth: int,
     visited: set[str],
 ) -> list[dict[str, Any]]:
-    """Recursively trace equations defining a quantity and their upstream inputs."""
+    """Recursively trace equations expressing/defining a quantity and their input derivations."""
     if depth <= 0 or qty_id in visited:
         return []
 
@@ -314,7 +314,7 @@ def _trace_equation_derivations(
     eq_props: dict[str, Any],
     depth: int,
 ) -> dict[str, Any]:
-    """Trace an equation's LHS outputs, models, and upstream input derivations."""
+    """Trace an equation's LHS outputs, models, and input derivations."""
     eq_id = str(eq_props.get("id") or "")
     safe_eid = eq_id.replace("'", "\\'")
     latex = str(eq_props.get("latex") or "")
@@ -475,17 +475,17 @@ def _trace_model_derivations(
     }
 
 
-@math_app.command("derive")
-def cmd_derive(
+@math_app.command("show")
+def cmd_show(
     target: str = typer.Argument(
         ...,
-        help="Symbol, Quantity ID, Equation ID, or Model ID to derive/trace.",
+        help="Symbol, Quantity ID, Equation ID, or Model ID to inspect/show.",
     ),
     depth: int = typer.Option(
         1,
         "--depth",
         "-d",
-        help="Upstream derivation depth.",
+        help="Dependency expansion depth for input quantities.",
     ),
     latex: bool = typer.Option(
         False,
@@ -495,7 +495,7 @@ def cmd_derive(
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
-    """Trace upstream mathematical derivations for a Symbol, Quantity, Equation, or Model."""
+    """Show equations, mathematical dependencies, and symbols for a Symbol, Quantity, Equation, or Model."""
     config = _load_config(kb, json_output)
     g = _open_db(kb, config, json_output)
     try:
@@ -581,11 +581,11 @@ def cmd_derive(
 
             derivs = res.get("derivations", [])
             if not derivs:
-                _console.print("[yellow]No defining equations found for this symbol in the graph.[/yellow]\n")
+                _console.print("[yellow]No expressing or defining equations found for this symbol in the graph.[/yellow]\n")
                 continue
 
             for d in derivs:
-                _console.print(f"\n[bold magenta]Defining Equation:[/] [bold cyan]{d['name']}[/] [dim]({d['id']})[/]")
+                _console.print(f"\n[bold magenta]Equation:[/] [bold cyan]{d['name']}[/] [dim]({d['id']})[/]")
                 d_sources = set(d.get("sources") or []) | {
                     doc["id"] for doc in d.get("documents", []) if doc.get("id")
                 }
@@ -625,7 +625,7 @@ def cmd_derive(
                         table.add_column("ID", style="dim")
                     table.add_column("Name", style="white")
                     table.add_column("Unit", style="magenta")
-                    table.add_column("Upstream Derivation", style="yellow")
+                    table.add_column("Derivation", style="yellow")
 
                     for inp in inputs:
                         up_str = (
@@ -647,7 +647,7 @@ def cmd_derive(
                         )
                     _console.print(table)
 
-                    # Print recursive upstream derivations if any
+                    # Print recursive derivations if any
                     for inp in inputs:
                         for up_d in inp.get("upstream_derivations", []):
                             up_sources = set(up_d.get("sources") or []) | {
@@ -658,7 +658,7 @@ def cmd_derive(
                                 doc_suffix = f" [dim]({', '.join(sorted(up_sources))})[/]"
 
                             _console.print(
-                                f"    ↳ [dim]Upstream for {inp['symbol_unicode']}:[/] "
+                                f"    ↳ [dim]Expressed by ({inp['symbol_unicode']}):[/] "
                                 f"[bold cyan]{up_d['id']}[/] [green]{up_d.get('latex_unicode') or ''}[/]{doc_suffix}"
                             )
                             if latex and up_d.get("latex"):
@@ -696,7 +696,7 @@ def cmd_derive(
                 out_strs = [
                     f"{o['symbol_unicode']} ({o['name']})" for o in res["outputs"]
                 ]
-                _console.print(f"  [bold bright_green]Defined Output(s):[/] {', '.join(out_strs)}")
+                _console.print(f"  [bold bright_green]Expressed Output(s):[/] {', '.join(out_strs)}")
 
             if res.get("models"):
                 m_names = ", ".join(f"{m['name']} ({m['id']})" for m in res["models"])
@@ -716,7 +716,7 @@ def cmd_derive(
                     table.add_column("ID", style="dim")
                 table.add_column("Name", style="white")
                 table.add_column("Unit", style="magenta")
-                table.add_column("Upstream Derivation", style="yellow")
+                table.add_column("Derivation", style="yellow")
 
                 for inp in inputs:
                     up_str = (
@@ -738,7 +738,7 @@ def cmd_derive(
                     )
                 _console.print(table)
 
-                # Print recursive upstream derivations if any
+                # Print recursive derivations if any
                 for inp in inputs:
                     for up_d in inp.get("upstream_derivations", []):
                         up_sources = set(up_d.get("sources") or []) | {
@@ -749,7 +749,7 @@ def cmd_derive(
                             doc_suffix = f" [dim]({', '.join(sorted(up_sources))})[/]"
 
                         _console.print(
-                            f"    ↳ [dim]Upstream for {inp['symbol_unicode']}:[/] "
+                            f"    ↳ [dim]Expressed by ({inp['symbol_unicode']}):[/] "
                             f"[bold cyan]{up_d['id']}[/] [green]{up_d.get('latex_unicode') or ''}[/]{doc_suffix}"
                         )
                         if latex and up_d.get("latex"):
@@ -877,11 +877,16 @@ def cmd_glossary(
                     else symbol_name_to_unicode(raw_sym)
                 )
 
-                # Find defining equations & usages
+                # Find expressing, defining equations & usages
                 safe_qid = qid.replace("'", "\\'")
+                expr_rows = g.execute(
+                    f"MATCH (q:{lbl} {{id: '{safe_qid}'}})-[r:EXPRESSED_BY]->(e:Equation) "
+                    f"RETURN e.id AS id"
+                )
+                expr_eqs = sorted({str(er.get("id")) for er in expr_rows if er.get("id")})
+
                 def_rows = g.execute(
-                    f"MATCH (q:{lbl} {{id: '{safe_qid}'}})-[r]-(e:Equation) "
-                    f"WHERE type(r) = 'DEFINED_BY' OR type(r) = 'EXPRESSED_BY' "
+                    f"MATCH (q:{lbl} {{id: '{safe_qid}'}})-[r:DEFINED_BY]->(e:Equation) "
                     f"RETURN e.id AS id"
                 )
                 def_eqs = sorted({str(dr.get("id")) for dr in def_rows if dr.get("id")})
@@ -916,6 +921,7 @@ def cmd_glossary(
                     "unit": props.get("unit") or "-",
                     "summary": props.get("summary") or "",
                     "sources": sources,
+                    "expressed_by_equations": expr_eqs,
                     "defining_equations": def_eqs,
                     "used_in_equations": used_eqs,
                     "models": mod_ids,
@@ -972,10 +978,12 @@ def cmd_glossary(
         srcs = ", ".join(item['sources']) if item['sources'] else "-"
 
         ctx_parts: list[str] = []
+        if item["expressed_by_equations"]:
+            ctx_parts.append(f"Expressed by: {', '.join(item['expressed_by_equations'])}")
         if item["defining_equations"]:
             ctx_parts.append(f"Defined by: {', '.join(item['defining_equations'])}")
         if item["used_in_equations"]:
-            ctx_parts.append(f"Downstream: {', '.join(item['used_in_equations'])}")
+            ctx_parts.append(f"Used in: {', '.join(item['used_in_equations'])}")
         if item["models"]:
             ctx_parts.append(f"Models: {', '.join(item['models'])}")
         ctx_str = "\n".join(ctx_parts) if ctx_parts else "-"

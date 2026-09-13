@@ -317,7 +317,7 @@
     },
     "DEFINED_BY": {
       "label": "defined by",
-      "description": "Entity is formally defined by an Equation (e.g. Algorithm DEFINED_BY Equation, Variable DEFINED_BY Equation).",
+      "description": "Entity is formally defined by an Equation (e.g. Algorithm DEFINED_BY Equation, Variable DEFINED_BY Equation). For Quantity, DEFINED_BY is an optional refinement on top of the mandatory EXPRESSED_BY edge to designate canonical / axiomatic definitions.",
       "range": ["Equation"],
       "transitive": false, "symmetric": false, "inverse_of": null
     },
@@ -346,7 +346,7 @@
     },
     "EXPRESSED_BY": {
       "label": "expressed by",
-      "description": "Model, MotionModel, SensorModel, NoiseModel, Algorithm, Method, ComputationalTask, or Quantity is expressed by an Equation or MotionModel (its mathematical formulation).",
+      "description": "Model, MotionModel, SensorModel, NoiseModel, Algorithm, Method, ComputationalTask, or Quantity is expressed by an Equation or MotionModel (its mathematical formulation). For Quantity, EXPRESSED_BY is the mandatory structural relationship connecting an isolated/defined LHS output quantity to its defining Equation.",
       "domain": ["Model", "MotionModel", "SensorModel", "NoiseModel", "Algorithm", "Method", "ComputationalTask", "Quantity"], "range": ["Equation", "MotionModel"],
       "transitive": false, "symmetric": false, "inverse_of": null
     },

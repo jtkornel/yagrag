@@ -320,7 +320,7 @@ def known_symbols(g: GraphDB) -> set[str]:
 # SymPy names a stored expression may reference. Deliberately curated: parsing
 # happens against this namespace only, so an expression cannot reach arbitrary
 # attributes even though `sympify` is `eval`-adjacent.
-_SYMPY_ALLOWED = ["Eq", "Ne", "Symbol", "symbols", "Function", "Matrix", "Sum", "Product", "Integral", "Derivative", "diff", "integrate", "simplify", "expand", "sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "Abs", "sign", "Min", "Max", "floor", "ceiling", "Piecewise", "Rational", "Integer", "Float", "pi", "E", "I", "oo", "Transpose", "Inverse", "Determinant", "trace", "zeros", "eye", "ones", "KroneckerDelta", "factorial", "binomial", "Pow", "Add", "Mul"]
+_SYMPY_ALLOWED = ["Eq", "Ne", "Lt", "Le", "Gt", "Ge", "Symbol", "symbols", "Function", "Matrix", "Sum", "Product", "Integral", "Derivative", "diff", "integrate", "simplify", "expand", "sqrt", "exp", "log", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "Abs", "sign", "Min", "Max", "floor", "ceiling", "Piecewise", "Rational", "Integer", "Float", "pi", "E", "oo", "Transpose", "Inverse", "Determinant", "trace", "zeros", "eye", "ones", "KroneckerDelta", "factorial", "binomial", "Pow", "Add", "Mul"]
 
 
 def _sympy_namespace() -> dict[str, Any]:
@@ -358,6 +358,63 @@ _INDEX_SUFFIX_RE = re.compile(
 )
 
 
+def _normalize_math_symbol_variants(s: str) -> set[str]:
+    """Generate normalized representations of an identifier or LaTeX symbol for matching."""
+    if not s:
+        return set()
+    # Normalize unescaped LaTeX control characters BEFORE strip() because chr(9) is whitespace
+    s = s.replace(chr(9), "\\t").replace(chr(10), "\\n").replace(chr(13), "\\r")
+    s = s.strip()
+    variants = {s, s.lstrip("\\")}
+
+    has_dot = bool(re.search(r"\\dot|\bdot\b|_dot", s))
+    has_bar = bool(re.search(r"\\bar|\bbar\b|_bar", s))
+    has_hat = bool(re.search(r"\\hat|\bhat\b|_hat", s))
+
+    clean = s
+    clean = re.sub(r"\\(?:dot|ddot|bar|hat|tilde|vec|mathbf|mathrm|mathit|mathcal|text)\{([^{}]+)\}", r"\1", clean)
+    clean = re.sub(r"\\mathcal\s*([a-zA-Z])", r"\1", clean)
+    clean = re.sub(r"_\{([^{}]+)\}", r"_\1", clean)
+    clean = clean.replace("{", "").replace("}", "")
+    # Add variant with backslash stripped
+    clean_no_slash = clean.replace("\\", "").strip()
+    variants.add(clean)
+    variants.add(clean_no_slash)
+
+    # Subscript normalization: e.g. x_ICR_l vs x_ICRl or x_icrl
+    clean_no_sub = clean_no_slash.replace("_", "")
+    variants.add(clean_no_sub)
+
+    if has_dot:
+        variants.add(f"{clean_no_slash}_dot")
+        variants.add(f"dot_{clean_no_slash}")
+    if has_bar:
+        variants.add(f"{clean_no_slash}_bar")
+        variants.add(f"bar_{clean_no_slash}")
+    if has_hat:
+        variants.add(f"{clean_no_slash}_hat")
+
+    # Greek aliases e.g. omega <-> w, chi <-> chi
+    for g_from, g_to in [("omega", "w"), ("w", "omega"), ("tau", "tau"), ("theta", "theta")]:
+        if g_from in clean_no_slash:
+            variants.add(clean_no_slash.replace(g_from, g_to))
+            variants.add(clean_no_sub.replace(g_from, g_to))
+
+    # Time-index / step aliases: e.g. k-1, i-1 <-> prev; k+1, i+1 <-> next
+    for v in list(variants):
+        if "-1" in v or "_1" in v:
+            variants.add(re.sub(r"[_\-]1$", "_prev", v))
+            variants.add(re.sub(r"[a-z0-9]+[_\-]1$", "prev", v))
+            variants.add(re.sub(r"[a-z0-9]+-1$", "_prev", v))
+        if "+1" in v or "_plus_1" in v:
+            variants.add(re.sub(r"[_\+]+1$", "_next", v))
+            variants.add(re.sub(r"[a-z0-9]+[_\+]+1$", "next", v))
+            variants.add(re.sub(r"[a-z0-9]+\+1$", "_next", v))
+
+    variants.update({v.lower() for v in list(variants)})
+    return {v for v in variants if v}
+
+
 def _symbol_matches_allowed(sym: str, allowed: set[str]) -> bool:
     if sym in allowed:
         return True
@@ -366,6 +423,23 @@ def _symbol_matches_allowed(sym: str, allowed: set[str]) -> bool:
         return True
     allowed_stems = {_INDEX_SUFFIX_RE.sub("", a) for a in allowed}
     return stem in allowed_stems
+
+
+def symbol_matches_candidate(sym: str, candidate: str) -> bool:
+    """Check if a symbol matches a candidate string or stem."""
+    if not sym or not candidate:
+        return False
+    if sym == candidate or sym.lstrip("\\") == candidate.lstrip("\\"):
+        return True
+
+    sym_vars = _normalize_math_symbol_variants(sym)
+    cand_vars = _normalize_math_symbol_variants(candidate)
+    if sym_vars & cand_vars:
+        return True
+
+    sym_stem = _INDEX_SUFFIX_RE.sub("", sym).lower()
+    cand_stem = _INDEX_SUFFIX_RE.sub("", candidate.lstrip("\\")).lower()
+    return bool(sym_stem and sym_stem == cand_stem)
 
 
 def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
@@ -413,6 +487,59 @@ def _check_sympy(source: str, allowed: set[str]) -> tuple[list[str], list[str]]:
             "to check against"
         )
     return errors, warnings
+
+
+def extract_sympy_equation_roles(source: str) -> tuple[set[str], set[str], list[str]]:
+    """Extract (lhs_symbols, rhs_symbols, errors) from a SymPy equation snippet.
+
+    For explicit equalities `Eq(lhs, rhs)` where `lhs` is an atomic Symbol,
+    `lhs.name` is categorized as an output (LHS) symbol, and `rhs.free_symbols`
+    are categorized as input (RHS) symbols.
+
+    For inequalities (`Lt`, `Le`, `Gt`, `Ge`, `Ne`) or implicit/non-atomic equalities,
+    all free symbols are categorized as input (RHS) symbols (empty LHS).
+    """
+    try:
+        import sympy
+        from sympy.parsing.sympy_parser import parse_expr
+    except ImportError:
+        return set(), set(), ["sympy is not installed"]
+
+    expressions = _expression_lines(source)
+    if not expressions:
+        return set(), set(), ["snippet contains no expression"]
+
+    namespace = _sympy_namespace()
+    lhs_symbols: set[str] = set()
+    rhs_symbols: set[str] = set()
+    errors: list[str] = []
+
+    for line in expressions:
+        try:
+            expr = parse_expr(
+                line,
+                local_dict={},
+                global_dict=namespace,
+                evaluate=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"sympy parse error in {line!r}: {exc}")
+            continue
+
+        if isinstance(expr, sympy.Eq) and isinstance(expr.lhs, sympy.Symbol):
+            lhs_symbols.add(str(expr.lhs.name))
+            rhs_free = {str(s) for s in getattr(expr.rhs, "free_symbols", set())}
+            rhs_symbols.update(rhs_free)
+        else:
+            # Inequality, implicit constraint, or non-atomic LHS: treat all free symbols as inputs
+            all_free = {str(s) for s in getattr(expr, "free_symbols", set())}
+            rhs_symbols.update(all_free)
+
+    # In multi-equation snippets, symbols defined on an LHS in one line shouldn't be
+    # considered external RHS inputs if they appear in later lines
+    rhs_symbols.difference_update(lhs_symbols)
+
+    return lhs_symbols, rhs_symbols, errors
 
 
 def _check_python(source: str, path: Path) -> list[str]:

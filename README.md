@@ -26,7 +26,7 @@ Current feature set:
 - **Document store & citation engine**: raw immutable ingestion, PDF/MD text extraction, and automated citation tracking (`kb doc cite`, `kb doc clean`, `kb doc stubs`).
 - **Embedded property graph (TrueSpar Traverse) + ISO GQL schema**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
 - **Cross-cutting terminological layer**: domain-agnostic `Acronym` support with polysemy disambiguation, `USES_ACRONYM` references, and `STANDS_FOR` concept links.
-- **Statically checkable mathematics & algorithms**: SymPy-verified expressions (`.sympy`), Python reference implementations (`.py`), and mathematical derivation tools (`kb math derive`, `kb math glossary`).
+- **Statically checkable mathematics & algorithms**: SymPy-verified expressions (`.sympy`), Python reference implementations (`.py`), and mathematical dependency inspection (`kb math show`, `kb math glossary`).
 - **Graph quality audit & maintenance**: non-destructive entity deduplication (`kb graph dedupe`) and structural graph linting (`kb graph lint`).
 - **Hybrid retrieval**: vector search + full-text search + graph context bundles via `kb search`.
 - **Agent skills**: 10 modular skills in `.agents/skills/` adhering to the open Agent Skills standard.
@@ -190,23 +190,17 @@ and nodes reference them via the `code_path` property. There is no inline code p
 The checkable form never replaces the display form. A schema that also declares a `latex` property (as the seed
 schema does on `Equation`) keeps both: LaTeX for fidelity to the source, SymPy for checking.
 
-#### Terminology
+#### Two complementary roles in the formal schema
 
-Two distinct roles are involved, and they are deliberately named differently:
+Two distinct roles are involved, and they are deliberately separated:
 
-*   **Statically checkable node type** — a node type whose schema declares the seven `code_*` properties, so each
-    of its nodes may point at a snippet that `kb code check` verifies. *Statically* means the check reads the
-    stored text only: nothing is executed and no LLM is consulted. This is the umbrella term, and it covers both
-    supported languages — the SymPy expressions as much as the Python procedures.
-*   **Symbol-bearing node type** — a node type whose schema declares a `symbol` property. Such nodes are not
-    checked themselves; they contribute the symbol vocabulary that a SymPy snippet's free symbols are compared
-    against.
+1.  **Statically checkable node types** — nodes that carry formal procedural code or symbolic mathematical
+    formulations in external `.py` or `.sympy` snippet files (e.g. `Equation`, `Algorithm`, `Method`).
+2.  **Symbol-bearing node types** — nodes that declare mathematical variables, quantities, and parameters
+    (e.g. `Quantity`, `Variable`). They do not hold executable code files; instead, they define the formal
+    symbol vocabulary that ground and validate the checkable expressions.
 
-A type can be both, one, or neither. Use these two terms only — earlier drafts also said "code-bearing" and
-"machine-checkable", which blurred the two roles. The `code_*` property prefix is retained as-is and always
-refers to the stored snippet, whatever its language: a SymPy expression lives in a `code_path` file too.
-
-#### This is a schema requirement, not a built-in list of types
+#### Statically checkable node types (Schema requirements)
 
 Nothing in the `kb` CLI knows which node types in *your* domain are formal. A node type becomes **statically checkable**
 purely by declaring the required property set in the schema — the checker discovers the statically checkable types by
@@ -231,15 +225,7 @@ All seven must be present — the last four are the result slots the checker wri
 declaration is not a statically checkable type. Declaring them is free for a type that never carries code: the
 properties simply stay null.
 
-Optionally, a node type may declare a **`symbol`** `STRING` property. Every type that does becomes a source of
-known symbols for SymPy symbol-consistency checking (its `symbol`, `id` and `name` values all count). In the
-seed schema those are `Quantity` and `Variable`; in another domain they might be `PhysicalConstant` or
-`FieldComponent`. Extracting intermediate parameters, normalization factors, constants, and sub-expression
-symbols (e.g., $C$, $N$, $\theta_k$) as explicit `Quantity` nodes connected via `USES_SYMBOL` maximizes
-symbol-graph interconnectivity and allows `kb code check` to verify all free symbols without warnings.
-Without any symbol-bearing type, expressions still parse — the symbol cross-check is simply reported as skipped.
-
-**What you get in return**, for free, on every statically checkable type:
+**What you get in return for checkable types**:
 
 *   `kb code list` — an inventory of every snippet-carrying node with its status, plus `stale` (file edited
     since the last check) and `missing` (dangling `code_path`) flags.
@@ -262,13 +248,43 @@ kb code check --lint --json
 kb code list --status failed
 ```
 
-#### Execution roadmap
+#### Symbol-bearing node types and cross-verification
 
-The system follows a staged path towards verified knowledge:
-*   **Stage 0 (Current)**: Static checking only. Syntax validation and graph-wide symbol consistency. No execution, no sandbox.
-*   **Stage 1**: Local execution via `kb code run`. Uses `resource` limits and whitelisted imports for soft isolation in a local subprocess.
-*   **Stage 2**: Full container/VM sandbox. Hard isolation with no network and read-only filesystems, also hosting the agent's own verification scripts.
-*   **Stage 3**: Verification as data. `Check` nodes linked by `VERIFIES` edges define expected inputs/outputs, turning the KB into a reproducible regression suite.
+Any node table declaring a `symbol STRING` property becomes an active symbol-bearing type discovered dynamically
+by the CLI. In the robotics seed schema, these are `Quantity` and `Variable`; in other scientific domains they could for instance be
+be `PhysicalConstant`, `StateCoordinate`, or `FieldComponent`.
+
+Rather than holding code snippets, symbol-bearing nodes link into the equations and algorithms, unlocking a
+three-tier consistency and linting pipeline across the CLI:
+
+1. **Syntactic Quality & Symbol Hygiene (`kb graph lint`)**:
+   - `symbol_quality` audit: Scans all symbol-bearing nodes to detect concatenated, corrupt, or uncleaned symbols
+     (e.g., long concatenated OCR strings, unbalanced brackets, or strings $> 30$ characters).
+   - Validates that symbols are clean mathematical identifiers (LaTeX, Greek letters, subscripted variables like
+     `\alpha_r`, `v_x`, `\omega_z`).
+
+2. **Grounding & Free Symbol Resolution (`kb code check`)**:
+   - When checking `.sympy` expressions, `kb code check` resolves all free mathematical symbols against the graph's
+     known symbol vocabulary (matching against node `symbol`, `id`, and `name`).
+   - Warns on ungrounded or floating free symbols that have not been explicitly defined in the graph, ensuring every
+     parameter and constant in an equation is documented.
+   - Extracting intermediate parameters, normalization factors, constants, and sub-expression symbols (e.g. $C$, $N$,
+     $\theta_k$) as explicit `Quantity` nodes connected via `USES_SYMBOL` maximizes symbol-graph interconnectivity.
+     Without any symbol-bearing type, expressions still parse, but the grounding check is reported as skipped.
+
+3. **Two-Way Symbolic & Graph Consistency Audit (`kb graph lint`)**:
+   - **LaTeX vs. Graph Edges**: Verifies that every connected quantity linked to an `Equation` via `USES_SYMBOL`,
+     `EXPRESSED_BY`, or `DEFINED_BY` actually appears in the equation's display `latex` formula.
+   - **LHS Output Role Matching**: Inspects `.sympy` equations to ensure the left-hand-side output variable is
+     connected to the equation via incoming `(Quantity)-[:EXPRESSED_BY]->(Equation)` (or `DEFINED_BY`).
+   - **RHS Input Role Matching**: Verifies that all right-hand-side inputs and parameters in `.sympy` are linked
+     via outgoing `(Equation)-[:USES_SYMBOL]->(Quantity)`.
+   - **Role Inversions & Completeness**: Automatically flags inverted roles (e.g., an output linked via `USES_SYMBOL`
+     instead of `EXPRESSED_BY`) and flags symbols present in code but missing from the graph or vice versa.
+
+4. **Mathematical Derivations & Glossaries (`kb math`)**:
+   - Powers `kb math glossary` and `kb math show` to produce unified, readable mathematical glossaries linking
+     formal symbols directly to their units, textual definitions, source papers, and defining equations.
 
 ### Schema evolution
 
@@ -299,7 +315,7 @@ Supported migration operations:
 | `kb index` | `build` |
 | `kb search` | (hybrid retrieval + context bundle) |
 | `kb code` | `list`, `show`, `check` |
-| `kb math` | `derive`, `glossary` |
+| `kb math` | `show`, `glossary` |
 
 Machine-readable output: use `--json`. All KB-aware subcommands (everything except `kb init`) accept `--kb <path>` (default: `.`).
 

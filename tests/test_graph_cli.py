@@ -561,3 +561,80 @@ def test_graph_dedupe_command_dry_run_and_apply(kb_dir: Path) -> None:
     assert len(rows) == 1
     assert rows[0]["id"] == "tool_gtsam"
     assert set(rows[0]["sources"]) == {"doc1", "doc2"}
+
+
+def test_graph_lint_sympy_ast_consistency(kb_dir: Path) -> None:
+    # Set up migration with Equation, Quantity and USES_SYMBOL / EXPRESSED_BY / DEFINED_BY
+    mdir = kb_dir / "schema" / "migrations"
+    (mdir / "0002_math_types.gql").write_text(
+        "CREATE NODE TYPE Equation (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, latex STRING, code_path STRING, code_language STRING);\n"
+        "CREATE NODE TYPE Quantity (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, symbol STRING, unit STRING);\n"
+        "CREATE EDGE TYPE USES_SYMBOL (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE EXPRESSED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE DEFINED_BY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n",
+        encoding="utf-8",
+    )
+    assert runner.invoke(app, ["schema", "apply", "--kb", str(kb_dir)]).exit_code == 0
+
+    # Write SymPy file
+    code_file = kb_dir / "code" / "equations" / "sample.sympy"
+    code_file.parent.mkdir(parents=True, exist_ok=True)
+    code_file.write_text("Eq(y, m * x + c)\n", encoding="utf-8")
+
+    # Upsert nodes: Equation, Quantity y (LHS), Quantity m, x, c (RHS)
+    for qid, sym in [("qty_y", "y"), ("qty_m", "m"), ("qty_x", "x"), ("qty_c", "c")]:
+        runner.invoke(
+            app,
+            ["graph", "upsert-node", "Quantity", "--props",
+             json.dumps({"id": qid, "name": qid, "symbol": sym, "origin": "raw", "sources": ["doc1"]}),
+             "--kb", str(kb_dir)],
+        )
+
+    runner.invoke(
+        app,
+        ["graph", "upsert-node", "Equation", "--props",
+         json.dumps({
+             "id": "eq_sample",
+             "name": "Linear Equation",
+             "latex": "y = m x + c",
+             "code_path": "code/equations/sample.sympy",
+             "code_language": "sympy",
+             "origin": "raw",
+             "sources": ["doc1"],
+         }),
+         "--kb", str(kb_dir)],
+    )
+
+    # 1. Without edges, lint should warn about missing EXPRESSED_BY and missing USES_SYMBOL
+    res = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
+    assert res.exit_code == 0
+    issues = json.loads(res.output)["issues"]
+    sym_issues = [i for i in issues if i["category"] == "symbolic_consistency"]
+    assert any("missing required incoming edge (Quantity)-[:EXPRESSED_BY]" in i["message"] for i in sym_issues)
+    assert any("uses free symbol 'm'" in i["message"] for i in sym_issues)
+
+    # 2. Add proper edges
+    runner.invoke(
+        app,
+        ["graph", "upsert-edge", "EXPRESSED_BY", "--from", "Quantity:qty_y", "--to", "Equation:eq_sample",
+         "--props", json.dumps({"origin": "raw", "sources": ["doc1"]}), "--kb", str(kb_dir)],
+    )
+    # Optional DEFINED_BY refinement
+    runner.invoke(
+        app,
+        ["graph", "upsert-edge", "DEFINED_BY", "--from", "Quantity:qty_y", "--to", "Equation:eq_sample",
+         "--props", json.dumps({"origin": "raw", "sources": ["doc1"]}), "--kb", str(kb_dir)],
+    )
+    for qid in ["qty_m", "qty_x", "qty_c"]:
+        runner.invoke(
+            app,
+            ["graph", "upsert-edge", "USES_SYMBOL", "--from", "Equation:eq_sample", "--to", f"Quantity:{qid}",
+             "--props", json.dumps({"origin": "raw", "sources": ["doc1"]}), "--kb", str(kb_dir)],
+        )
+
+    # Now lint should have zero symbolic_consistency issues for this equation
+    res2 = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
+    assert res2.exit_code == 0
+    issues2 = json.loads(res2.output)["issues"]
+    sym_issues2 = [i for i in issues2 if i["category"] == "symbolic_consistency" and i["id"] == "eq_sample"]
+    assert len(sym_issues2) == 0
