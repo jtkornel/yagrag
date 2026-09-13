@@ -17,8 +17,11 @@ The system is split in two:
 The knowledge-graph philosophy is **Wikidata, not Wikipedia**: the graph is
 designed to capture structured domain knowledge that lives *inside* documents
 (variables, factors, methods, equations, quantities, claims and their
-relations), not just bibliographic links between documents. See the design document in
-`docs/design_and_architecture.md` for the full design.
+relations), not just bibliographic links between documents. See
+[`docs/design_and_architecture.md`](docs/design_and_architecture.md) for the
+system design and architecture overview (or
+[`docs/design_and_architecture_historical.md`](docs/design_and_architecture_historical.md)
+for the original project bootstrap notes).
 
 ### Status
 
