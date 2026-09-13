@@ -68,7 +68,7 @@ def populated_kb(kb_dir: Path, tmp_path: Path) -> Path:
         "Factor graphs are widely used for SLAM and sensor fusion on UGVs.\n"
     )
     assert runner.invoke(
-        app, ["doc", "add", str(doc), "--kind", "raw", "--kb", str(kb_dir), "--json"]
+        app, ["doc", "add", str(doc), "--kind", "raw", "--no-doi", "--kb", str(kb_dir), "--json"]
     ).exit_code == 0
     assert runner.invoke(
         app,

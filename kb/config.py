@@ -48,6 +48,14 @@ class EmbedderConfig(BaseModel):
     dim: int = 384
 
 
+class DocumentsConfig(BaseModel):
+    """Document store policies and validation settings."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    require_doi: bool = True
+
+
 def _parse_semver(v: str) -> tuple[int, ...]:
     parts = []
     for piece in v.strip().split("."):
@@ -71,6 +79,7 @@ class KBConfig(BaseModel):
     description: str = ""
     paths: PathsConfig = Field(default_factory=PathsConfig)
     embedder: EmbedderConfig = Field(default_factory=EmbedderConfig)
+    documents: DocumentsConfig = Field(default_factory=DocumentsConfig)
 
     @classmethod
     def default(cls, name: str = "kb", description: str = "") -> KBConfig:
@@ -141,5 +150,8 @@ class KBConfig(BaseModel):
         lines.append(f'backend = "{self.embedder.backend}"')
         lines.append(f'model = "{self.embedder.model}"')
         lines.append(f"dim = {self.embedder.dim}")
+        lines.append("")
+        lines.append("[documents]")
+        lines.append(f"require_doi = {'true' if self.documents.require_doi else 'false'}")
         lines.append("")
         return "\n".join(lines)

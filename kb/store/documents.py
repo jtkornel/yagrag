@@ -37,6 +37,10 @@ class DuplicateDocumentError(StoreError):
     """Raised when ingesting a file whose content hash is already stored."""
 
 
+class MissingDOIError(StoreError):
+    """Raised when ingesting a raw document without a DOI when require_doi is enabled."""
+
+
 class UnsupportedFormatError(StoreError):
     """Raised for file formats the store does not natively support."""
 
@@ -189,6 +193,7 @@ class DocumentStore:
         notes: str = "",
         url: str = "",
         doi: str = "",
+        allow_no_doi: bool = False,
     ) -> DocumentRecord:
         """Ingest `source` as a document of `kind`. Returns the new record.
 
@@ -215,6 +220,14 @@ class DocumentStore:
             missing = [s for s in sources if s not in known]
             if missing:
                 raise StoreError(f"unknown source document id(s): {', '.join(missing)}")
+
+        # DOI enforcement: raw documents require a DOI by default
+        doi = doi.strip()
+        if kind == "raw" and self.config.documents.require_doi and not allow_no_doi and not doi:
+            raise MissingDOIError(
+                "raw documents require a DOI for traceability and remote retrieval; "
+                "pass --doi <doi>, or use --no-doi / --allow-no-doi to bypass"
+            )
 
         digest = content_hash(source)
         existing = self.find_by_hash(digest)

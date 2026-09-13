@@ -120,12 +120,13 @@ A key differentiator of `yagrag` is static verifiability of equations and code:
 
 ---
 
-## 6. Document Store & Citation Engine
+## 6. Document Store, Provenance & Citation Engine
 
-- **Immutable Ingestion**: Source files added via `kb doc ingest` are stored immutably with SHA-256 integrity checks recorded in `manifest.json`.
+- **Immutable Ingestion**: Source files added via `kb doc add` are stored immutably with SHA-256 integrity checks recorded in `manifest.json`.
+- **Traceability & DOI Requirement**: To enable remote re-retrieval and lightweight repository distribution without committing copyright-restricted raw document binaries (`kb doc fetch`), raw documents require a DOI (`--doi`) by default. Users working with internal or unpublished documents can bypass this using `--no-doi` (or by setting `require_doi = false` in `kb.toml`).
 - **Text Extraction**: Transparent conversion of PDF and Markdown sources into clean text for chunking and search.
 - **Citation Linking**: In-text citations (e.g., `\cite{...}`, DOIs, markdown links) are parsed and resolved to `Document` nodes with `CITES` edges in the graph (`kb doc cite`).
-- **Remote Synchronization**: Metadata manifests can reference remote DOIs and file URLs, allowing lightweight repository distribution without committing copyright-restricted raw document binaries (`kb doc fetch`, `kb graph dump`, `kb graph restore`).
+- **Remote Synchronization**: Metadata manifests reference remote DOIs and file URLs, allowing lightweight repository distribution without committing copyright-restricted raw document binaries (`kb doc fetch`, `kb graph dump`, `kb graph restore`).
 
 ---
 

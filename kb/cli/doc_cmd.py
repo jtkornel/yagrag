@@ -109,12 +109,55 @@ def cmd_add(
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeatable)."),
     notes: str = typer.Option("", "--notes"),
     url: str = typer.Option("", "--url", help="Origin URL of the document."),
+    doi: str = typer.Option("", "--doi", help="Digital Object Identifier (DOI) for raw documents."),
+    allow_no_doi: bool = typer.Option(
+        False,
+        "--no-doi",
+        "--allow-no-doi",
+        help="Allow ingesting a raw document without a DOI (overrides require_doi).",
+    ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
     """Ingest a document into the store (immutable copy for raw)."""
     if kind not in ("raw", "synthesized"):
         _fail(f"invalid --kind {kind!r}; expected raw or synthesized", json_output)
+
+    # Auto-extract DOI from url or doi argument if not already a clean DOI
+    resolved_doi = doi.strip()
+    import re
+
+    if resolved_doi:
+        # If user passed a DOI URL or arXiv ID/URL into --doi, normalize it
+        m_doi = re.search(
+            r"(?:doi\.org/|doi:)(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)", resolved_doi, re.IGNORECASE
+        )
+        if m_doi:
+            resolved_doi = m_doi.group(1)
+        else:
+            m_arx = re.search(
+                r"(?:arxiv\.org/(?:abs|pdf)/|arxiv:)(\d{4}\.\d{4,5}(?:v\d+)?)",
+                resolved_doi,
+                re.IGNORECASE,
+            )
+            if m_arx:
+                resolved_doi = f"10.48550/arXiv.{m_arx.group(1)}"
+
+    if not resolved_doi and url:
+        m_doi = re.search(
+            r"(?:doi\.org/|doi:)(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)", url, re.IGNORECASE
+        )
+        if m_doi:
+            resolved_doi = m_doi.group(1)
+        else:
+            m_arxiv = re.search(
+                r"(?:arxiv\.org/(?:abs|pdf)/|arxiv:)(\d{4}\.\d{4,5}(?:v\d+)?)",
+                url,
+                re.IGNORECASE,
+            )
+            if m_arxiv:
+                resolved_doi = f"10.48550/arXiv.{m_arxiv.group(1)}"
+
     store = _open_store(kb, json_output)
     try:
         rec = store.add(
@@ -125,6 +168,8 @@ def cmd_add(
             tags=list(tag),
             notes=notes,
             url=url,
+            doi=resolved_doi,
+            allow_no_doi=allow_no_doi,
         )
     except StoreError as exc:
         _fail(str(exc), json_output)
@@ -153,6 +198,8 @@ def cmd_add(
                 }
                 if rec.url:
                     props["url"] = rec.url
+                if rec.doi:
+                    props["doi"] = rec.doi
                 upsert_node(g, "Document", props)
 
                 # Automatic stub reconciliation for raw ingested papers
@@ -284,7 +331,11 @@ def cmd_fetch(
 
         target_url = rec.url
         if not target_url and rec.doi:
-            target_url = f"https://doi.org/{rec.doi}"
+            if rec.doi.startswith("10.48550/arXiv."):
+                arxiv_id = rec.doi.removeprefix("10.48550/arXiv.")
+                target_url = f"https://arxiv.org/abs/{arxiv_id}"
+            else:
+                target_url = f"https://doi.org/{rec.doi}"
 
         if not target_url:
             skipped.append({"id": rec.id, "reason": "no URL or DOI specified in manifest"})
@@ -294,6 +345,9 @@ def cmd_fetch(
         download_url = target_url
         if "arxiv.org/abs/" in target_url:
             download_url = target_url.replace("arxiv.org/abs/", "arxiv.org/pdf/") + ".pdf"
+        elif target_url.startswith("https://doi.org/10.48550/arXiv."):
+            arxiv_id = target_url.removeprefix("https://doi.org/10.48550/arXiv.")
+            download_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
 
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)

@@ -14,6 +14,7 @@ from kb.config import KBConfig
 from kb.store.documents import (
     DocumentStore,
     DuplicateDocumentError,
+    MissingDOIError,
     StoreError,
     UnsupportedFormatError,
 )
@@ -44,10 +45,11 @@ def sample_md(tmp_path: Path) -> Path:
 
 
 def test_add_raw_document(store: DocumentStore, sample_md: Path) -> None:
-    rec = store.add(sample_md, "raw", title="Factor graphs")
+    rec = store.add(sample_md, "raw", title="Factor graphs", doi="10.1000/182")
     assert rec.id == "raw-0001"
     assert rec.kind == "raw"
     assert rec.format == "md"
+    assert rec.doi == "10.1000/182"
     stored = store.kb_root / rec.path
     assert stored.is_file()
     assert "documents/raw/" in rec.path
@@ -57,15 +59,26 @@ def test_add_raw_document(store: DocumentStore, sample_md: Path) -> None:
     assert stored.with_name(stored.name + ".meta.json").is_file()
 
 
-def test_duplicate_ingest_detected(store: DocumentStore, sample_md: Path) -> None:
-    store.add(sample_md, "raw")
-    with pytest.raises(DuplicateDocumentError):
+def test_add_raw_document_without_doi_fails_by_default(store: DocumentStore, sample_md: Path) -> None:
+    with pytest.raises(MissingDOIError, match="require a DOI"):
         store.add(sample_md, "raw")
+
+
+def test_add_raw_document_allow_no_doi_override(store: DocumentStore, sample_md: Path) -> None:
+    rec = store.add(sample_md, "raw", allow_no_doi=True)
+    assert rec.id == "raw-0001"
+    assert rec.doi == ""
+
+
+def test_duplicate_ingest_detected(store: DocumentStore, sample_md: Path) -> None:
+    store.add(sample_md, "raw", doi="10.1000/182")
+    with pytest.raises(DuplicateDocumentError):
+        store.add(sample_md, "raw", doi="10.1000/182")
 
 
 def test_raw_must_not_declare_sources(store: DocumentStore, sample_md: Path) -> None:
     with pytest.raises(StoreError, match="must not declare sources"):
-        store.add(sample_md, "raw", sources=["raw-0001"])
+        store.add(sample_md, "raw", sources=["raw-0001"], allow_no_doi=True)
 
 
 def test_synthesized_requires_sources(store: DocumentStore, sample_md: Path) -> None:
@@ -79,7 +92,7 @@ def test_synthesized_rejects_unknown_sources(store: DocumentStore, sample_md: Pa
 
 
 def test_synthesized_with_valid_source(store: DocumentStore, sample_md: Path, tmp_path: Path) -> None:
-    raw = store.add(sample_md, "raw")
+    raw = store.add(sample_md, "raw", allow_no_doi=True)
     summary = tmp_path / "summary.md"
     summary.write_text("# Summary of factor graphs\n")
     rec = store.add(summary, "synthesized", sources=[raw.id])
@@ -92,11 +105,11 @@ def test_unsupported_format_rejected(store: DocumentStore, tmp_path: Path) -> No
     bad = tmp_path / "page.html"
     bad.write_text("<html></html>")
     with pytest.raises(UnsupportedFormatError):
-        store.add(bad, "raw")
+        store.add(bad, "raw", allow_no_doi=True)
 
 
 def test_remove_blocked_by_dependents(store: DocumentStore, sample_md: Path, tmp_path: Path) -> None:
-    raw = store.add(sample_md, "raw")
+    raw = store.add(sample_md, "raw", allow_no_doi=True)
     summary = tmp_path / "summary.md"
     summary.write_text("summary\n")
     store.add(summary, "synthesized", sources=[raw.id])
@@ -105,14 +118,14 @@ def test_remove_blocked_by_dependents(store: DocumentStore, sample_md: Path, tmp
 
 
 def test_remove_document(store: DocumentStore, sample_md: Path) -> None:
-    rec = store.add(sample_md, "raw")
+    rec = store.add(sample_md, "raw", allow_no_doi=True)
     store.remove(rec.id)
     assert store.records() == []
     assert not (store.kb_root / rec.path).exists()
 
 
 def test_extract_text_md(store: DocumentStore, sample_md: Path) -> None:
-    rec = store.add(sample_md, "raw")
+    rec = store.add(sample_md, "raw", allow_no_doi=True)
     assert "bipartite graph" in store.extract_text(rec.id)
 
 
@@ -122,11 +135,12 @@ def test_extract_text_md(store: DocumentStore, sample_md: Path) -> None:
 def test_doc_add_list_show_cli(kb_dir: Path, sample_md: Path) -> None:
     result = runner.invoke(
         app,
-        ["doc", "add", str(sample_md), "--kind", "raw", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(sample_md), "--kind", "raw", "--doi", "10.1000/182", "--kb", str(kb_dir), "--json"],
     )
     assert result.exit_code == 0, result.output
     rec = json.loads(result.output)
     assert rec["id"] == "raw-0001"
+    assert rec["doi"] == "10.1000/182"
 
     result = runner.invoke(app, ["doc", "list", "--kb", str(kb_dir), "--json"])
     assert result.exit_code == 0
@@ -138,11 +152,31 @@ def test_doc_add_list_show_cli(kb_dir: Path, sample_md: Path) -> None:
     assert json.loads(result.output)["title"] == "note"
 
 
+def test_doc_add_missing_doi_cli_fails_by_default(kb_dir: Path, sample_md: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 2
+    assert "require a DOI" in json.loads(result.output)["error"]
+
+
+def test_doc_add_no_doi_flag_cli(kb_dir: Path, sample_md: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--no-doi", "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    rec = json.loads(result.output)
+    assert rec["id"] == "raw-0001"
+    assert rec.get("doi", "") == ""
+
+
 def test_doc_add_with_url_cli(kb_dir: Path, sample_md: Path) -> None:
     url = "https://example.com/paper.pdf"
     result = runner.invoke(
         app,
-        ["doc", "add", str(sample_md), "--kind", "raw", "--url", url, "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(sample_md), "--kind", "raw", "--url", url, "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     assert result.exit_code == 0, result.output
     rec = json.loads(result.output)
@@ -150,8 +184,43 @@ def test_doc_add_with_url_cli(kb_dir: Path, sample_md: Path) -> None:
     assert rec["url"] == url
 
 
+def test_doc_add_with_doi_url_extracts_doi_cli(kb_dir: Path, sample_md: Path) -> None:
+    url = "https://doi.org/10.1109/TRO.2023.123456"
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--url", url, "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    rec = json.loads(result.output)
+    assert rec["id"] == "raw-0001"
+    assert rec["doi"] == "10.1109/TRO.2023.123456"
+
+
+def test_doc_add_with_arxiv_url_maps_to_datacite_doi_cli(kb_dir: Path, sample_md: Path) -> None:
+    url = "https://arxiv.org/abs/2305.12345"
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--url", url, "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    rec = json.loads(result.output)
+    assert rec["id"] == "raw-0001"
+    assert rec["doi"] == "10.48550/arXiv.2305.12345"
+
+
+def test_doc_add_with_arxiv_id_in_doi_arg_cli(kb_dir: Path, sample_md: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["doc", "add", str(sample_md), "--kind", "raw", "--doi", "arXiv:2401.09876", "--kb", str(kb_dir), "--json"],
+    )
+    assert result.exit_code == 0, result.output
+    rec = json.loads(result.output)
+    assert rec["id"] == "raw-0001"
+    assert rec["doi"] == "10.48550/arXiv.2401.09876"
+
+
 def test_doc_add_duplicate_cli_nonzero(kb_dir: Path, sample_md: Path) -> None:
-    args = ["doc", "add", str(sample_md), "--kind", "raw", "--kb", str(kb_dir), "--json"]
+    args = ["doc", "add", str(sample_md), "--kind", "raw", "--no-doi", "--kb", str(kb_dir), "--json"]
     assert runner.invoke(app, args).exit_code == 0
     result = runner.invoke(app, args)
     assert result.exit_code == 2
@@ -199,7 +268,7 @@ def test_doc_stubs_match_and_reconcile_cli(kb_dir: Path, sample_md: Path, tmp_pa
     # 2. Ingest a raw document
     res_add = runner.invoke(
         app,
-        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Factor graphs paper", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Factor graphs paper", "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     assert res_add.exit_code == 0
     raw_id = json.loads(res_add.output)["id"]
@@ -257,7 +326,7 @@ def test_doc_stubs_match_and_reconcile_cli(kb_dir: Path, sample_md: Path, tmp_pa
     paper_file.write_text("# iSAM\nFull text of iSAM paper.\n")
     res_add_new = runner.invoke(
         app,
-        ["doc", "add", str(paper_file), "--kind", "raw", "--title", "iSAM Paper", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(paper_file), "--kind", "raw", "--title", "iSAM Paper", "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     new_raw_id = json.loads(res_add_new.output)["id"]
 
@@ -300,7 +369,7 @@ def test_doc_cite_command_and_auto_reconcile(kb_dir: Path, sample_md: Path, tmp_
     # Ingest citing raw document
     res_add1 = runner.invoke(
         app,
-        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Citing Paper 1", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Citing Paper 1", "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     doc1_id = json.loads(res_add1.output)["id"]
 
@@ -326,7 +395,7 @@ def test_doc_cite_command_and_auto_reconcile(kb_dir: Path, sample_md: Path, tmp_
     paper2.write_text("# Paper 2\n")
     res_add2 = runner.invoke(
         app,
-        ["doc", "add", str(paper2), "--kind", "raw", "--title", "Citing Paper 2", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(paper2), "--kind", "raw", "--title", "Citing Paper 2", "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     doc2_id = json.loads(res_add2.output)["id"]
 
@@ -362,6 +431,7 @@ def test_doc_cite_command_and_auto_reconcile(kb_dir: Path, sample_md: Path, tmp_
             "doc", "add", str(gtsam_file),
             "--kind", "raw",
             "--title", "GTSAM Factor Graph Library Manual",
+            "--no-doi",
             "--kb", str(kb_dir), "--json",
         ],
     )
@@ -405,7 +475,7 @@ def test_doc_clean_command_dry_run_and_apply(kb_dir: Path, sample_md: Path) -> N
     # Ingest a citing document
     res_add = runner.invoke(
         app,
-        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Main Paper", "--kb", str(kb_dir), "--json"],
+        ["doc", "add", str(sample_md), "--kind", "raw", "--title", "Main Paper", "--no-doi", "--kb", str(kb_dir), "--json"],
     )
     doc_id = json.loads(res_add.output)["id"]
 

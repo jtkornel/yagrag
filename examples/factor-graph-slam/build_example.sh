@@ -44,6 +44,7 @@ kb schema validate --kb "$TARGET" >/dev/null
 # first raw document in a fresh KB is deterministically `raw-0001`.
 kb doc add "$EXAMPLE_DIR/paper.md" --kind raw \
     --title "Tightly-Coupled Wheel-Inertial Factor-Graph SLAM for Skid-Steer UGVs" \
+    --doi "10.1002/rob.22123" \
     --tag factor-graphs --tag slam --tag ugv \
     --kb "$TARGET" --json >/dev/null
 DOC=raw-0001
