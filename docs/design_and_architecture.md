@@ -18,7 +18,7 @@ A fundamental design invariant of `yagrag` is the strict separation between dete
 ```mermaid
 flowchart TD
     User([User / Researcher]) <--> Agent[LLM Agent]
-    subgraph Agent Layer [Agent Layer - .agents/skills/]
+    subgraph AgentLayer ["Agent Layer - .agents/skills/"]
         S1[domain-modeling]
         S2[ingest-document]
         S3[deep-knowledge-extraction]
@@ -27,10 +27,10 @@ flowchart TD
         S6[code-representation]
         S7[hybrid-retrieval]
     end
-    Agent -->|Skill Guidance| Agent Layer
+    Agent -->|Skill Guidance| AgentLayer
     Agent -->|Shell / CLI Invocations| CLI[Deterministic CLI: `kb`]
 
-    subgraph Deterministic Core [Deterministic Core - Python CLI]
+    subgraph DeterministicCore ["Deterministic Core - Python CLI"]
         Store[Document Store & Manifest]
         GraphEngine[TrueSpar Traverse GQL Graph]
         MathEngine[SymPy / AST Checker]
@@ -44,7 +44,7 @@ flowchart TD
     CLI --> SearchEngine
     CLI --> SchemaManager
 
-    subgraph Storage [Local Storage - KB Directory]
+    subgraph Storage ["Local Storage - KB Directory"]
         Files[(documents/raw + synthesized)]
         Config[(kb.toml)]
         DB[(graph.tvdb)]
