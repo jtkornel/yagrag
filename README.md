@@ -83,6 +83,10 @@ by ingesting raw text, extracting structured entities + reified claims, building
 The script produces roughly **~25 domain entities**, **~30 relations**, and **3 reified claims**, plus one
 SymPy equation and one Python algorithm that it checks with `kb code check`.
 
+### Real-world knowledge base
+
+For a more complete example, explore the [Mobile Robotics & State Estimation Knowledge Base](https://github.com/jtkornel/mobile_robotics_kb). It contains a small sample of analyzed documents on mobile robot kinematics (especially skid-steer and differential drive), sensor fusion, state estimation, SymPy-verified mathematical formulations, runnable algorithm implementations, and a pre-built property graph snapshot.
+
 ### Deterministic CLI vs agent reasoning
 
 The central architectural boundary is *deterministic CLI, LLM reasoning in the agent*:
