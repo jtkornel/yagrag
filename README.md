@@ -7,17 +7,19 @@ A **lightweight, local-first GraphRAG system** for building and maintaining
 
 The system is split in two:
 
-- **A deterministic CLI (`kb`)** — implemented in Python, performs all
+- **A deterministic CLI tool (`kb`)** — implemented in Python, performs all
   document-store and graph-database operations. **No LLM calls inside the CLI.**
 - **An agent layer** — a set of agent skills (in `.agents/skills/`) that tell
-  an LLM agent *how* to interview the user, model the domain, ingest and analyse
+  an LLM agent *how* to interview the user, model the domain, ingest and analyze
   documents, evolve the , update the graph, synthesize documents, and
   answer questions — always by invoking the deterministic CLI.
 
 The knowledge-graph philosophy is **Wikidata, not Wikipedia**: the graph is
 designed to capture structured domain knowledge that lives *inside* documents
 (variables, factors, methods, equations, quantities, claims and their
-relations), in addition to links between documents. There are quite a few facilities to give 
+relations), in addition to links between documents.
+
+Knowledge base extraction is challenging, and there are quite a few facilities to give 
 "back-pressure" from the knowledge base tool the agent to ensure the quality of the extracted structures.
 For instance the there is an initial schema for the property graph, useful for general
 technical documents that can be explicitly expanded to domain specific content. For mathematics
@@ -196,9 +198,8 @@ supported:
 *   **Mathematics**: a **SymPy-parseable canonical expression** in a `.sympy` file (one relation per line).
 *   **Procedures**: a reference implementation in **Python 3.11 + NumPy** in a `.py` file.
 
-All snippets are stored as **real files** under the `code/` directory (e.g., `code/equations/range_residual.sympy`),
-and nodes reference them via the `code_path` property. There is no inline code property: real files are what
-`ruff` wants and what `git diff` can version.
+All snippets are stored under the `code/` directory (e.g., `code/equations/range_residual.sympy`),
+and nodes reference them via the `code_path` property.
 
 The checkable form never replaces the display form. A  that also declares a `latex` property (as the seed
  does on `Equation`) keeps both: LaTeX for fidelity to the source, SymPy for checking.
