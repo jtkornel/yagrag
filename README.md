@@ -11,7 +11,7 @@ The system is split in two:
   document-store and graph-database operations. **No LLM calls inside the CLI.**
 - **An agent layer** — a set of agent skills (in `.agents/skills/`) that tell
   an LLM agent *how* to interview the user, model the domain, ingest and analyze
-  documents, evolve the , update the graph, synthesize documents, and
+  documents, evolve the schema, update the graph, synthesize documents, and
   answer questions — always by invoking the deterministic CLI.
 
 The knowledge-graph philosophy is **Wikidata, not Wikipedia**: the graph is
@@ -20,7 +20,7 @@ designed to capture structured domain knowledge that lives *inside* documents
 relations), in addition to links between documents.
 
 Knowledge base extraction is challenging, and there are quite a few facilities to give 
-"back-pressure" from the knowledge base tool the agent to ensure the quality of the extracted structures.
+"back-pressure" from the knowledge base tool to the agent to ensure the quality of the extracted structures.
 For instance the there is an initial schema for the property graph, useful for general
 technical documents that can be explicitly expanded to domain specific content. For mathematics
 and algorithms the schema is aligned with ontologies from [MaRDI](https://www.mardi4nfdi.de/about/mission), and the tool can do static checking of symbolic equations and code. See
@@ -219,7 +219,7 @@ Two distinct roles are involved, and they are deliberately separated:
 Nothing in the `kb` CLI knows which node types in *your* domain are formal. A node type becomes **statically checkable**
 purely by declaring the required property set in the  — the checker discovers the statically checkable types by
 inspecting the applied  at runtime. The seed  happens to make `Equation`, `Algorithm`, `Method`,
-`Factor`, `MotionModel`, `SensorModel` and `NoiseModel` statically checkable, but that is a property of *that* .
+`Factor`, `MotionModel`, `SensorModel` and `NoiseModel` statically checkable, but that is a property of *that* schema.
 A knowledge base about wave mechanics, orbital dynamics or bird flight patterns gets exactly the same machinery
 by declaring the same properties on `DispersionRelation`, `Manoeuvre` or `FlightPattern`.
 
