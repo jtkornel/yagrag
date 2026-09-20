@@ -35,7 +35,7 @@ Current feature set:
 
 - **Deterministic CLI (`kb`)**: scriptable, offline, provenance-enforced operations with **no LLM calls**.
 - **Document store & citation engine**: raw immutable ingestion, PDF/MD text extraction, and automated citation tracking (`kb doc cite`, `kb doc clean`, `kb doc stubs`).
-- **Embedded property graph (TrueSpar Traverse) + ISO GQL**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
+- **Embedded property graph (TrueSpar Traverse) + ISO GQL schema**: native property graph with tracked `.gql` migrations, structured domain types, and reified claims.
 - **Cross-cutting terminological layer**: domain-agnostic `Acronym` support with polysemy disambiguation, `USES_ACRONYM` references, and `STANDS_FOR` concept links.
 - **Statically checkable mathematics & algorithms**: SymPy-verified expressions (`.sympy`), Python reference implementations (`.py`), and mathematical dependency inspection (`kb math show`, `kb math glossary`).
 - **Graph quality audit & maintenance**: non-destructive entity deduplication (`kb graph dedupe`) and structural graph linting (`kb graph lint`).
@@ -68,10 +68,10 @@ my-kb/
     raw/                  # immutable ingested sources
     synthesized/          # agent-generated documents
     manifest.json         # document index
-  /
-    migrations/           # versioned  migrations (copy in the seed  here)
+  schema/
+    migrations/           # versioned schema migrations (copy in the seed schema here)
   code/                   # statically checkable snippets referenced by `code_path`
-  graph.tvdb              # embedded Traverse database file (created on first `kb  apply`)
+  graph.tvdb              # embedded Traverse database file (created on first `kb schema apply`)
 ```
 
 ### The worked example
@@ -101,7 +101,7 @@ The central architectural boundary is *deterministic CLI, LLM reasoning in the a
   document store, graph writes/queries, index build, and hybrid retrieval.
 - The CLI is fully scriptable and testable offline.
 - All reasoning lives in the agent: interviewing the user, deciding what entities exist, extraction,
-   proposals, synthesis, and answering questions.
+  schema proposals, synthesis, and answering questions.
 - The agent is guided by the markdown skills in `.agents/skills/` and acts only by invoking the CLI.
 
 Benefits: the tool is harness-agnostic, deterministic, unit-testable, and the “intelligence” is swappable.
@@ -124,23 +124,23 @@ per-tool configuration. If your agent only scans its own directory, symlink or c
 
 | Skill | Use it when |
 |---|---|
-| `domain-modeling` | Interview the user to define node and relation types for a new domain and verify against the existing . |
+| `domain-modeling` | Interview the user to define node and relation types for a new domain and verify against the existing schema. |
 | `ingest-document` | Add a new raw document to the knowledge base and initialize its record. |
 | `save-html-as-digestible` | Convert a web page or HTML content into clean Markdown before ingesting it into the KB. |
 | `deep-knowledge-extraction` | Extract structured domain entities, relations, and claims from a document's text. |
-| `-evolution` | Extend the knowledge base  by adding new node or relation types via migrations. |
+| `schema-evolution` | Extend the knowledge base schema by adding new node or relation types via migrations. |
 | `graph-update` | Reconcile and update the knowledge graph with new facts while maintaining consistency. |
 | `document-synthesis` | Create new summary or overview documents based on existing knowledge in the graph. |
 | `question-answering` | Answer user questions using evidence strictly retrieved from the knowledge base. |
 | `code-representation` | Write and check statically checkable code for equations, algorithms, and models. |
 | `knowledge-base-maintenance` | Audit, clean, and maintain knowledge base quality across documents, citations, domain entities, and symbols. |
 
-### The layered  philosophy
+### The layered schema philosophy
 
 **Wikidata, not Wikipedia**: the goal is a graph of structured facts *inside* documents — not a fuzzy
 “what this paper is about” summary.
 
-The  in `/migrations/` defines node and relation types organized in **four conceptual layers**.
+The schema in `schema/migrations/` defines node and relation types organized in **four conceptual layers**.
 The upper layers are generic and reusable across all scientific and technical domains; the domain layer is
 customizable to the specific field:
 
@@ -201,10 +201,10 @@ supported:
 All snippets are stored under the `code/` directory (e.g., `code/equations/range_residual.sympy`),
 and nodes reference them via the `code_path` property.
 
-The checkable form never replaces the display form. A  that also declares a `latex` property (as the seed
- does on `Equation`) keeps both: LaTeX for fidelity to the source, SymPy for checking.
+The checkable form never replaces the display form. A schema that also declares a `latex` property (as the seed
+schema does on `Equation`) keeps both: LaTeX for fidelity to the source, SymPy for checking.
 
-#### Two complementary roles in the formal 
+#### Two complementary roles in the formal schema
 
 Two distinct roles are involved, and they are deliberately separated:
 
@@ -214,16 +214,16 @@ Two distinct roles are involved, and they are deliberately separated:
     (e.g. `Quantity`, `Variable`). They do not hold executable code files; instead, they define the formal
     symbol vocabulary that ground and validate the checkable expressions.
 
-#### Statically checkable node types ( requirements)
+#### Statically checkable node types (Schema requirements)
 
 Nothing in the `kb` CLI knows which node types in *your* domain are formal. A node type becomes **statically checkable**
-purely by declaring the required property set in the  — the checker discovers the statically checkable types by
-inspecting the applied  at runtime. The seed  happens to make `Equation`, `Algorithm`, `Method`,
+purely by declaring the required property set in the schema — the checker discovers the statically checkable types by
+inspecting the applied schema at runtime. The seed schema happens to make `Equation`, `Algorithm`, `Method`,
 `Factor`, `MotionModel`, `SensorModel` and `NoiseModel` statically checkable, but that is a property of *that* schema.
 A knowledge base about wave mechanics, orbital dynamics or bird flight patterns gets exactly the same machinery
 by declaring the same properties on `DispersionRelation`, `Manoeuvre` or `FlightPattern`.
 
-**What your  must declare** on a node type, for that type to hold statically checked code:
+**What your schema must declare** on a node type, for that type to hold statically checked code:
 
 | Property | Type | Meaning |
 |---|---|---|
@@ -265,7 +265,7 @@ kb code list --status failed
 #### Symbol-bearing node types and cross-verification
 
 Any node table declaring a `symbol STRING` property becomes an active symbol-bearing type discovered dynamically
-by the CLI. In the robotics seed , these are `Quantity` and `Variable`; in other scientific domains they could for instance be
+by the CLI. In the robotics seed schema, these are `Quantity` and `Variable`; in other scientific domains they could for instance be
 be `PhysicalConstant`, `StateCoordinate`, or `FieldComponent`.
 
 Rather than holding code snippets, symbol-bearing nodes link into the equations and algorithms, unlocking a
@@ -300,14 +300,14 @@ three-tier consistency and linting pipeline across the CLI:
    - Powers `kb math glossary` and `kb math show` to produce unified, readable mathematical glossaries linking
      formal symbols directly to their units, textual definitions, source papers, and defining equations.
 
-###  evolution
+### Schema evolution
 
- evolves via versioned, numbered migrations:
+Schema evolves via versioned, numbered migrations:
 
-- `kb  migrate` scaffolds a numbered empty `.gql` migration in `/migrations/`.
-- `kb  apply` applies all pending migrations **idempotently**.
-- `kb  validate` checks the database against the target .
-- `kb  status` lists applied vs pending migrations.
+- `kb schema migrate` scaffolds a numbered empty `.gql` migration in `schema/migrations/`.
+- `kb schema apply` applies all pending migrations **idempotently**.
+- `kb schema validate` checks the database against the target schema.
+- `kb schema status` lists applied vs pending migrations.
 
 Migrations are append-only and never edited once applied.
 
@@ -323,7 +323,7 @@ Supported migration operations:
 | Command group | Subcommands |
 |---|---|
 | `kb init` | `<path>` (and `--name`, `--json`) |
-| `kb ` | `show`, `validate`, `apply`, `migrate`, `status` |
+| `kb schema` | `show`, `validate`, `apply`, `migrate`, `status` |
 | `kb doc` | `add`, `list`, `show`, `text`, `remove`, `cite`, `stubs`, `match-stubs`, `reconcile-stub`, `clean` |
 | `kb graph` | `upsert-node`, `upsert-edge`, `upsert-claim`, `query`, `export`, `batch`, `lint`, `dedupe` |
 | `kb index` | `build` |
