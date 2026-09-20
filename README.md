@@ -17,10 +17,10 @@ The system is split in two:
 The knowledge-graph philosophy is **Wikidata, not Wikipedia**: the graph is
 designed to capture structured domain knowledge that lives *inside* documents
 (variables, factors, methods, equations, quantities, claims and their
-relations), in addition to links between documents.
+relations), in addition to referential links between documents.
 
-Knowledge base extraction is challenging, and there are quite a few facilities to give 
-"back-pressure" from the knowledge base tool to the agent to ensure the quality of the extracted structures.
+Knowledge base extraction is challenging, and there are quite a few facilities to give
+**back-pressure** from the knowledge base tool to the agent to ensure the quality of the extracted structures.
 For instance the there is an initial schema for the property graph, useful for general
 technical documents that can be explicitly expanded to domain specific content. For mathematics
 and algorithms the schema is aligned with ontologies from [MaRDI](https://www.mardi4nfdi.de/about/mission), and the tool can do static checking of symbolic equations and code. See
@@ -98,7 +98,7 @@ For a more complete example, explore the [Mobile Robotics & State Estimation Kno
 The central architectural boundary is *deterministic CLI, LLM reasoning in the agent*:
 
 - The `kb` CLI contains **no LLM calls of any kind**. It only performs deterministic operations for the
-  document store, graph writes/queries, index build, and hybrid retrieval.
+  document store, graph writes/queries, index build, graph linting and hybrid retrieval.
 - The CLI is fully scriptable and testable offline.
 - All reasoning lives in the agent: interviewing the user, deciding what entities exist, extraction,
   schema proposals, synthesis, and answering questions.
