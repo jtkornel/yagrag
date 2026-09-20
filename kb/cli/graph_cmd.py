@@ -624,7 +624,7 @@ def cmd_lint(
         if "Claim" in node_tables:
             claims = g.execute(
                 "MATCH (c:Claim) RETURN c.id AS id, c.name AS name, c.summary AS summary, "
-                "c.predicate AS predicate, c.sources AS sources"
+                "c.predicate AS predicate, c.sources AS sources, c.qualifiers AS qualifiers"
             )
             for c in claims:
                 cid = c["id"]
@@ -632,6 +632,7 @@ def cmd_lint(
                 summary = c["summary"] or ""
                 predicate = c["predicate"] or ""
                 sources = c["sources"] or []
+                qualifiers_raw = c.get("qualifiers")
 
                 if not summary:
                     issues.append(
@@ -683,6 +684,71 @@ def cmd_lint(
                             "message": f"Claim {cid} is missing provenance 'sources'.",
                         }
                     )
+
+                # Validate qualifiers (citation-augmenting claims)
+                if qualifiers_raw:
+                    try:
+                        q_data = _json.loads(qualifiers_raw) if isinstance(qualifiers_raw, str) else qualifiers_raw
+                        if isinstance(q_data, dict):
+                            valid_ref_types = {
+                                "ADOPTS_FORMULATION",
+                                "EXTENDS_METHOD",
+                                "REVISES_ASSUMPTION",
+                                "EVALUATES_PROPERTY",
+                                "BENCHMARKS_AGAINST",
+                                "BACKGROUND_CONTEXT",
+                            }
+                            valid_attitudes = {"Positive", "Negative", "Neutral"}
+
+                            ref_type = q_data.get("reference_type")
+                            if ref_type is not None and ref_type not in valid_ref_types:
+                                issues.append(
+                                    {
+                                        "category": "claim_qualifier",
+                                        "severity": "error",
+                                        "id": cid,
+                                        "node_type": "Claim",
+                                        "message": (
+                                            f"Claim {cid} qualifiers has invalid 'reference_type': {ref_type!r}. "
+                                            f"Must be one of: {sorted(valid_ref_types)}"
+                                        ),
+                                    }
+                                )
+
+                            attitude = q_data.get("attitude")
+                            if attitude is not None and attitude not in valid_attitudes:
+                                issues.append(
+                                    {
+                                        "category": "claim_qualifier",
+                                        "severity": "error",
+                                        "id": cid,
+                                        "node_type": "Claim",
+                                        "message": (
+                                            f"Claim {cid} qualifiers has invalid 'attitude': {attitude!r}. "
+                                            f"Must be one of: {sorted(valid_attitudes)}"
+                                        ),
+                                    }
+                                )
+                        else:
+                            issues.append(
+                                {
+                                    "category": "claim_qualifier",
+                                    "severity": "error",
+                                    "id": cid,
+                                    "node_type": "Claim",
+                                    "message": f"Claim {cid} 'qualifiers' JSON is not an object.",
+                                }
+                            )
+                    except Exception as e:
+                        issues.append(
+                            {
+                                "category": "claim_qualifier",
+                                "severity": "error",
+                                "id": cid,
+                                "node_type": "Claim",
+                                "message": f"Claim {cid} 'qualifiers' failed JSON parsing: {e}",
+                            }
+                        )
 
         # 3. Dynamic capability & schema property checks (symbol, code_status, provenance)
         for nt in node_tables:
@@ -1046,6 +1112,64 @@ def cmd_lint(
                                         "message": f"Edge ({fl}:{fid})-[:{rel}]->({tl}:{tid}) violates range: {tl!r} not in {sem.range}",
                                     }
                                 )
+
+        # 7. Reference edge provenance and valid entity audit
+        ref_edge_types = [
+            "ADOPTS_FORMULATION",
+            "EXTENDS_METHOD",
+            "REVISES_ASSUMPTION",
+            "EVALUATES_PROPERTY",
+            "BENCHMARKS_AGAINST",
+            "BACKGROUND_CONTEXT",
+        ]
+        for ret in ref_edge_types:
+            if ret in rel_tables:
+                try:
+                    edges = g.execute(
+                        f"MATCH (a)-[r:{ret}]->(b) "
+                        f"RETURN a.id AS fid, b.id AS tid, r.origin AS origin, r.sources AS sources"
+                    )
+                    for e in edges:
+                        fid = e.get("fid")
+                        tid = e.get("tid")
+                        origin = e.get("origin")
+                        sources = e.get("sources")
+                        edge_id = f"{fid}-[{ret}]->{tid}"
+
+                        if not fid or not tid:
+                            issues.append(
+                                {
+                                    "category": "reference_edge",
+                                    "severity": "error",
+                                    "id": edge_id,
+                                    "node_type": ret,
+                                    "message": f"Reference edge {edge_id} has invalid/missing endpoint id.",
+                                }
+                            )
+
+                        if not origin or origin not in ("raw", "synthesized", "inferred", "mardi"):
+                            issues.append(
+                                {
+                                    "category": "provenance",
+                                    "severity": "error",
+                                    "id": edge_id,
+                                    "node_type": ret,
+                                    "message": f"Reference edge {edge_id} has missing or invalid origin: {origin!r}.",
+                                }
+                            )
+
+                        if not sources or not isinstance(sources, list) or len(sources) == 0:
+                            issues.append(
+                                {
+                                    "category": "provenance",
+                                    "severity": "error",
+                                    "id": edge_id,
+                                    "node_type": ret,
+                                    "message": f"Reference edge {edge_id} is missing required provenance 'sources'.",
+                                }
+                            )
+                except Exception:
+                    pass
     finally:
         g.close()
 
@@ -1067,8 +1191,9 @@ def cmd_lint(
                 _console.print(
                     f"  [{color}]{iss['severity'].upper()}[/{color}] [{iss['category']}] {iss['message']}"
                 )
-        if not ok:
-            raise typer.Exit(code=1)
+
+    if not ok:
+        raise typer.Exit(code=1)
 
 
 @graph_app.command("dedupe")
@@ -1344,3 +1469,334 @@ def cmd_dedupe(
             str(m["redirected_edges_count"]),
         )
     _console.print(table)
+
+
+_REFERENCE_REL_TYPES = [
+    "ADOPTS_FORMULATION",
+    "EXTENDS_METHOD",
+    "REVISES_ASSUMPTION",
+    "EVALUATES_PROPERTY",
+    "BENCHMARKS_AGAINST",
+    "BACKGROUND_CONTEXT",
+]
+
+
+@graph_app.command("lineage")
+def cmd_lineage(
+    entity_id: str = typer.Argument(..., help="Entity ID to trace lineage for."),
+    direction: str = typer.Option(
+        "both", "--direction", "-d", help="Lineage direction: 'upstream', 'downstream', or 'both'."
+    ),
+    max_depth: int = typer.Option(
+        5, "--max-depth", "-m", help="Maximum traversal depth (1-10)."
+    ),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Trace deep technical reference lineage upstream (prior art) and downstream (derivatives)."""
+    dir_norm = direction.lower().strip()
+    if dir_norm not in ("upstream", "downstream", "both"):
+        _fail(f"Invalid direction {direction!r}; must be 'upstream', 'downstream', or 'both'", json_output)
+
+    max_depth = max(1, min(10, max_depth))
+    g = _open_db(kb, json_output)
+
+    rel_tables = set(g.rel_table_names())
+    active_rel_types = [r for r in _REFERENCE_REL_TYPES if r in rel_tables]
+
+    try:
+        # Check that entity exists
+        node_res = g.execute(
+            "MATCH (n) WHERE n.id = $id RETURN labels(n) AS lbl, n.id AS id, coalesce(n.name, '') AS name",
+            {"id": entity_id},
+        )
+        if not node_res:
+            _fail(f"Entity {entity_id!r} not found in graph.", json_output)
+
+        root_label = (node_res[0].get("lbl") or [None])[0] or "Entity"
+        root_name = node_res[0].get("name") or entity_id
+
+        upstream_chain: list[dict[str, Any]] = []
+        downstream_chain: list[dict[str, Any]] = []
+
+        # BFS traversal helper
+        def _traverse(start_id: str, is_upstream: bool) -> list[dict[str, Any]]:
+            results: list[dict[str, Any]] = []
+            visited: set[str] = {start_id}
+            queue: list[tuple[str, int]] = [(start_id, 0)]
+
+            while queue:
+                curr_id, depth = queue.pop(0)
+                if depth >= max_depth:
+                    continue
+
+                for rel in active_rel_types:
+                    if is_upstream:
+                        # n -> target (n adopts / extends target)
+                        q = (
+                            f"MATCH (curr {{id: $curr_id}})-[r:{rel}]->(target) "
+                            f"RETURN labels(target) AS tl, target.id AS tid, coalesce(target.name, '') AS tname, "
+                            f"coalesce(r.aspect, '') AS aspect, coalesce(r.section, '') AS section, "
+                            f"coalesce(r.context, '') AS context"
+                        )
+                    else:
+                        # source -> curr (source adopts / extends curr)
+                        q = (
+                            f"MATCH (source)-[r:{rel}]->(curr {{id: $curr_id}}) "
+                            f"RETURN labels(source) AS tl, source.id AS tid, coalesce(source.name, '') AS tname, "
+                            f"coalesce(r.aspect, '') AS aspect, coalesce(r.section, '') AS section, "
+                            f"coalesce(r.context, '') AS context"
+                        )
+
+                    try:
+                        rows = g.execute(q, {"curr_id": curr_id})
+                    except Exception:
+                        rows = []
+
+                    for row in rows:
+                        tid = row.get("tid")
+                        if not tid:
+                            continue
+                        tl = (row.get("tl") or [None])[0] or "Entity"
+                        item = {
+                            "from_id": curr_id if is_upstream else tid,
+                            "to_id": tid if is_upstream else curr_id,
+                            "rel": rel,
+                            "target_id": tid,
+                            "target_label": tl,
+                            "target_name": row.get("tname") or tid,
+                            "depth": depth + 1,
+                            "aspect": row.get("aspect") or None,
+                            "section": row.get("section") or None,
+                            "context": row.get("context") or None,
+                        }
+                        results.append(item)
+                        if tid not in visited:
+                            visited.add(tid)
+                            queue.append((tid, depth + 1))
+            return results
+
+        if dir_norm in ("upstream", "both"):
+            upstream_chain = _traverse(entity_id, is_upstream=True)
+        if dir_norm in ("downstream", "both"):
+            downstream_chain = _traverse(entity_id, is_upstream=False)
+
+    finally:
+        g.close()
+
+    result = {
+        "entity_id": entity_id,
+        "label": root_label,
+        "name": root_name,
+        "upstream_count": len(upstream_chain),
+        "upstream": upstream_chain,
+        "downstream_count": len(downstream_chain),
+        "downstream": downstream_chain,
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result, indent=2))
+        return
+
+    _console.print(f"[bold]Lineage trace for {root_label}:{entity_id} ({root_name}):[/bold]")
+
+    if dir_norm in ("upstream", "both"):
+        _console.print(f"\n[cyan]Upstream Lineage (Prior art / Dependencies adopted/extended) [{len(upstream_chain)}]:[/cyan]")
+        if not upstream_chain:
+            _console.print("  (none)")
+        else:
+            table = Table("Depth", "Relation", "Target Entity", "Aspect / Section / Context")
+            for u in upstream_chain:
+                details = " | ".join(
+                    f"{k}: {v}" for k, v in [("aspect", u["aspect"]), ("sec", u["section"]), ("ctx", u["context"])] if v
+                )
+                table.add_row(
+                    str(u["depth"]),
+                    f"-[:{u['rel']}]->",
+                    f"{u['target_label']}:{u['target_id']} ({u['target_name']})",
+                    details,
+                )
+            _console.print(table)
+
+    if dir_norm in ("downstream", "both"):
+        _console.print(f"\n[cyan]Downstream Lineage (Derivatives / Works adopting/evaluating this) [{len(downstream_chain)}]:[/cyan]")
+        if not downstream_chain:
+            _console.print("  (none)")
+        else:
+            table = Table("Depth", "Relation", "Derivative Entity", "Aspect / Section / Context")
+            for d in downstream_chain:
+                details = " | ".join(
+                    f"{k}: {v}" for k, v in [("aspect", d["aspect"]), ("sec", d["section"]), ("ctx", d["context"])] if v
+                )
+                table.add_row(
+                    str(d["depth"]),
+                    f"<-[:{d['rel']}]-",
+                    f"{d['target_label']}:{d['target_id']} ({d['target_name']})",
+                    details,
+                )
+            _console.print(table)
+
+
+@graph_app.command("consensus")
+def cmd_consensus(
+    entity_id: str = typer.Argument(..., help="Entity ID to analyze consensus and evaluations for."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Aggregate evaluative claims and typed reference edges evaluating an entity to determine consensus."""
+    g = _open_db(kb, json_output)
+
+    node_tables = set(g.node_table_names())
+    rel_tables = set(g.rel_table_names())
+
+    try:
+        # Check that entity exists
+        node_res = g.execute(
+            "MATCH (n) WHERE n.id = $id RETURN labels(n) AS lbl, n.id AS id, coalesce(n.name, '') AS name",
+            {"id": entity_id},
+        )
+        if not node_res:
+            _fail(f"Entity {entity_id!r} not found in graph.", json_output)
+
+        root_label = (node_res[0].get("lbl") or [None])[0] or "Entity"
+        root_name = node_res[0].get("name") or entity_id
+
+        evaluations: list[dict[str, Any]] = []
+        attitude_counts = {"Positive": 0, "Negative": 0, "Neutral": 0, "Unknown": 0}
+
+        # 1. Query reified Claims about or targeting this entity
+        if "Claim" in node_tables:
+            claim_q = (
+                "MATCH (c:Claim) "
+                "WHERE (c)-[:ABOUT]->({id: $id}) OR (c)-[:HAS_OBJECT]->({id: $id}) "
+                "RETURN c.id AS id, c.name AS name, c.summary AS summary, "
+                "c.predicate AS predicate, coalesce(c.qualifiers, '') AS qualifiers, "
+                "c.sources AS sources, coalesce(c.confidence, 1.0) AS confidence"
+            )
+            try:
+                c_rows = g.execute(claim_q, {"id": entity_id})
+            except Exception:
+                c_rows = []
+
+            for r in c_rows:
+                cid = r.get("id")
+                q_raw = r.get("qualifiers") or ""
+                attitude = "Neutral"
+                ref_type = None
+                aspect = None
+
+                if q_raw:
+                    try:
+                        q_parsed = _json.loads(q_raw) if isinstance(q_raw, str) else q_raw
+                        if isinstance(q_parsed, dict):
+                            attitude = q_parsed.get("attitude") or "Neutral"
+                            ref_type = q_parsed.get("reference_type")
+                            aspect = q_parsed.get("aspect") or q_parsed.get("target_anchor")
+                    except Exception:
+                        pass
+
+                att_key = attitude if attitude in attitude_counts else "Unknown"
+                attitude_counts[att_key] += 1
+
+                evaluations.append({
+                    "kind": "claim",
+                    "id": cid,
+                    "name": r.get("name") or cid,
+                    "summary": r.get("summary") or "",
+                    "predicate": r.get("predicate"),
+                    "reference_type": ref_type,
+                    "attitude": attitude,
+                    "aspect": aspect,
+                    "sources": r.get("sources") or [],
+                    "confidence": r.get("confidence"),
+                })
+
+        # 2. Query direct reference edges targeting this entity (incoming reference edges)
+        active_ref_types = [r for r in _REFERENCE_REL_TYPES if r in rel_tables]
+        for rel in active_ref_types:
+            edge_q = (
+                f"MATCH (source)-[r:{rel}]->(target {{id: $id}}) "
+                f"RETURN labels(source) AS sl, source.id AS sid, coalesce(source.name, '') AS sname, "
+                f"coalesce(r.aspect, '') AS aspect, coalesce(r.section, '') AS section, "
+                f"coalesce(r.context, '') AS context, r.sources AS sources, "
+                f"coalesce(r.confidence, 1.0) AS confidence"
+            )
+            try:
+                e_rows = g.execute(edge_q, {"id": entity_id})
+            except Exception:
+                e_rows = []
+
+            for er in e_rows:
+                sid = er.get("sid")
+                sl = (er.get("sl") or [None])[0] or "Entity"
+                # For reference edges, default attitude is Neutral unless specified in aspect/context
+                attitude = "Neutral"
+                attitude_counts["Neutral"] += 1
+
+                evaluations.append({
+                    "kind": "edge",
+                    "id": f"{sid}-[{rel}]->{entity_id}",
+                    "source_id": sid,
+                    "source_label": sl,
+                    "source_name": er.get("sname") or sid,
+                    "reference_type": rel,
+                    "attitude": attitude,
+                    "aspect": er.get("aspect") or er.get("section") or None,
+                    "context": er.get("context") or None,
+                    "sources": er.get("sources") or [],
+                    "confidence": er.get("confidence"),
+                })
+
+    finally:
+        g.close()
+
+    total_evals = len(evaluations)
+    result = {
+        "entity_id": entity_id,
+        "label": root_label,
+        "name": root_name,
+        "total_evaluations": total_evals,
+        "attitudes": attitude_counts,
+        "evaluations": evaluations,
+    }
+
+    if json_output:
+        typer.echo(_json.dumps(result, indent=2))
+        return
+
+    _console.print(f"[bold]Consensus & Evaluation Summary for {root_label}:{entity_id} ({root_name}):[/bold]")
+    _console.print(f"Total Evaluations / Inbound References: [bold]{total_evals}[/bold]")
+    _console.print(
+        f"Attitude breakdown: [green]Positive: {attitude_counts['Positive']}[/green] | "
+        f"[red]Negative: {attitude_counts['Negative']}[/red] | "
+        f"[cyan]Neutral: {attitude_counts['Neutral']}[/cyan]"
+        + (f" | [yellow]Unknown: {attitude_counts['Unknown']}[/yellow]" if attitude_counts["Unknown"] else "")
+    )
+
+    if not evaluations:
+        _console.print("\n  [yellow]No evaluative claims or typed inbound reference edges found for this entity.[/yellow]")
+        return
+
+    _console.print("\n[bold]Evaluations & Citations:[/bold]")
+    table = Table("Kind", "Attitude", "Ref Type", "Source / ID", "Aspect / Summary")
+    for ev in evaluations:
+        att = ev.get("attitude") or "Neutral"
+        color = "green" if att == "Positive" else ("red" if att == "Negative" else "cyan")
+        if ev["kind"] == "claim":
+            src = f"Claim:{ev['id']}"
+            desc = ev.get("summary") or ev.get("name") or ""
+            if ev.get("aspect"):
+                desc = f"[{ev['aspect']}] {desc}"
+        else:
+            src = f"{ev['source_label']}:{ev['source_id']}"
+            desc = ev.get("context") or ev.get("aspect") or ""
+
+        table.add_row(
+            ev["kind"],
+            f"[{color}]{att}[/{color}]",
+            ev.get("reference_type") or "-",
+            src,
+            desc,
+        )
+    _console.print(table)
+

@@ -106,6 +106,7 @@ Schema changes are managed via forward-only numbered `.gql` migration files:
 - `0003_symbolic_equation_relations.gql`: Deep links between `Equation`, `Quantity`, and `Symbol`.
 - `0004_add_acronym_support.gql`: Polysemy disambiguation via `Acronym`, `USES_ACRONYM`, and `STANDS_FOR`.
 - `0005_mardi_alignment.gql`: Integration with Mathematical Research Data Initiative (MaRDI) ontology.
+- `0006_deep_typed_references.gql`: Typed cross-document citation edges and reified claim qualifiers.
 
 The schema companion (`schema/companion.json`) enforces canonical edge directions, preventing reversed or hallucinated relationship topologies during agent extraction.
 
@@ -125,6 +126,7 @@ A key differentiator of `yagrag` is static verifiability of equations and code:
 - **Immutable Ingestion**: Source files added via `kb doc add` are stored immutably with SHA-256 integrity checks recorded in `manifest.json`.
 - **Traceability & DOI Requirement**: To enable remote re-retrieval and lightweight repository distribution without committing copyright-restricted raw document binaries (`kb doc fetch`), raw documents require a DOI (`--doi`) by default. Users working with internal or unpublished documents can bypass this using `--no-doi` (or by setting `require_doi = false` in `kb.toml`).
 - **Text Extraction**: Transparent conversion of PDF and Markdown sources into clean text for chunking and search.
+- **Typed Claims and Deep Cross-Document References**: Citations extend beyond coarse `(Document)-[:CITES]->(Document)` edges down to specific domain entities (`Method`, `Equation`, `Algorithm`, `Model`, `Assumption`, `Dataset`) via typed reference relations (`ADOPTS_FORMULATION`, `EXTENDS_METHOD`, `REVISES_ASSUMPTION`, `EVALUATES_PROPERTY`, `BENCHMARKS_AGAINST`, `BACKGROUND_CONTEXT`). Nuanced evaluations and critiques are reified through `Claim` nodes with decoupled `reference_type` and `attitude` qualifiers. Provenance and qualifiers are enforced by `kb graph lint`, while cross-document lineage and consensus queries are supported via `kb graph lineage` and `kb graph consensus`. For detailed architecture, design decisions, and paper attribution (Ding et al., 2026), see [`docs/integrating_typed_claims_and_deep_references.md`](integrating_typed_claims_and_deep_references.md).
 - **Citation Linking**: In-text citations (e.g., `\cite{...}`, DOIs, markdown links) are parsed and resolved to `Document` nodes with `CITES` edges in the graph (`kb doc cite`).
 - **Remote Synchronization**: Metadata manifests reference remote DOIs and file URLs, allowing lightweight repository distribution without committing copyright-restricted raw document binaries (`kb doc fetch`, `kb graph dump`, `kb graph restore`).
 

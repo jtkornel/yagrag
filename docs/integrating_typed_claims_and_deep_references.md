@@ -110,17 +110,55 @@ CREATE EDGE TYPE BACKGROUND_CONTEXT (
 );
 ```
 
-#### B. Reified `Claim` Nodes for Evaluative Assertions
-When an assertion involves nuanced arguments, empirical results, or conflicting findings, it is modeled via `yagrag`'s existing `Claim` node:
-* `subject`: Citing entity (e.g., `Method:meth_new_solver` or `Document:doc_002`)
+#### B. Reifying Nuanced Cross-Document Claims Using the Unchanged `Claim` Entity
+The existing `Claim` node in `yagrag` is a general reified assertion primitive (`predicate`, `object_literal`, `qualifiers`, linked via `ABOUT` and `HAS_OBJECT`). It is meant for *any* type of claim appearing in a document (e.g., benchmark numbers, convergence assertions, performance metrics) and must not be restricted or altered with mandatory citation-specific fields.
+
+When a cross-document citation involves nuanced arguments, empirical results, or comparative evaluations that require reification beyond a simple typed edge, **the existing `Claim` entity schema is reused completely unchanged**. Citation nuances (such as reference taxonomy and valence) are cleanly encapsulated in the existing `qualifiers` JSON property without altering the node schema:
+
+* `subject`: Citing entity (linked via `ABOUT`, e.g., `Method:meth_new_solver` or `Document:doc_002`)
 * `predicate`: Semantic relationship (e.g., `"evaluates_property"`, `"improves_upon"`, `"computational_bottleneck"`, `"relaxes_assumption"`)
-* `object`: Cited entity (e.g., `Algorithm:alg_baseline` or `Equation:eq_canonical_update`)
+* `object`: Cited entity (linked via `HAS_OBJECT`, e.g., `Algorithm:alg_baseline` or `Equation:eq_canonical_update`) or `object_literal`
 * `properties`:
   * `name`: Short summary label (e.g., `"Matrix inversion scaling evaluation"`)
   * `summary`: Full contextual quote and finding
-  * `reference_type`: Reference classification category (`ADOPTS_FORMULATION`, `EXTENDS_METHOD`, `REVISES_ASSUMPTION`, `EVALUATES_PROPERTY`, `BENCHMARKS_AGAINST`, `BACKGROUND_CONTEXT`)
-  * `attitude`: Valence toward target (`Positive`, `Negative`, `Neutral`)
-  * `target_anchor`: Structural locator (`"Section IV-A, Eq. (8)"`)
+  * `qualifiers`: JSON-encoded qualifier map containing contextual citation metadata:
+    * `reference_type`: Reference classification category (`ADOPTS_FORMULATION`, `EXTENDS_METHOD`, `REVISES_ASSUMPTION`, `EVALUATES_PROPERTY`, `BENCHMARKS_AGAINST`, `BACKGROUND_CONTEXT`)
+    * `attitude`: Valence toward target (`Positive`, `Negative`, `Neutral`)
+    * `target_anchor`: Structural locator (`"Section IV-A, Eq. (8)"`)
+  * Standard provenance fields: `origin`, `sources`, `confidence`.
+
+##### Comparison: General Domain Claims vs. Citation-Augmenting Claims
+Because `Claim` remains completely generic:
+1. **General Single-Document Claim** (no citation context needed):
+   ```bash
+   kb graph upsert-claim claim_drift_01 \
+     --subject Method:preint_v2 \
+     --predicate "achieves_drift" \
+     --object-literal "0.5% per km" \
+     --props '{
+       "name": "IMU Preintegration Drift",
+       "summary": "Achieves 0.5% relative translation drift per kilometer on KITTI sequence 00.",
+       "origin": "raw",
+       "sources": ["raw-0001"],
+       "confidence": 0.95
+     }'
+   ```
+2. **Citation-Augmenting Claim** (reifying a nuanced cross-document critique or evaluation):
+   ```bash
+   kb graph upsert-claim claim_dense_solver_bottleneck \
+     --subject Method:meth_sparse_isam2 \
+     --predicate "evaluates_scaling_limit" \
+     --object Algorithm:alg_dense_cholesky \
+     --props '{
+       "name": "Dense solver cubic scaling limit",
+       "summary": "Full dense Cholesky factorization incurs O(N^3) scaling as trajectory grows, making batch re-linearization intractable in real-time.",
+       "qualifiers": "{\"reference_type\": \"EVALUATES_PROPERTY\", \"attitude\": \"Negative\", \"target_anchor\": \"Section IV-A, Eq. (8)\"}",
+       "origin": "raw",
+       "sources": ["raw-0005"],
+       "confidence": 0.90
+     }'
+   ```
+This preserves the generality of `Claim` across all documents, while allowing rich citation analytics whenever `qualifiers` contain `reference_type`.
 
 ---
 
@@ -201,7 +239,7 @@ The CLI requires no internal LLMs. It requires schema support and mechanical hel
        --props '{"section": "Introduction", "origin": "raw", "sources": ["doc_002"]}'
      ```
    * Extend `kb graph lint`:
-     Add lint checks ensuring that typed reference edges reference valid entities, carry non-empty provenance, and that any reified `Claim` with an evaluative reference type includes both valid `reference_type` and `attitude` enums.
+     Add lint checks ensuring that typed reference edges reference valid entities and carry non-empty provenance. For reified `Claim` nodes, standard claims require no citation fields; if a `Claim` includes `reference_type` or `attitude` within its `qualifiers`, linting validates that they match allowed enum values.
    * Add typed citation analytics to `kb graph` (e.g., `kb graph lineage <entity_id>` or `kb graph consensus <entity_id>`).
 
 ### 6.2 Agent Layer Workflow (`deep-knowledge-extraction` Skill)
@@ -211,7 +249,7 @@ The reasoning burden is placed on the agent skill:
    * **Attitude (Valence)**: `Positive`, `Negative`, or `Neutral`.
    * **Default Fallback Rule**: If the citation is merely contextual, introductory, or cannot be confidently mapped to a specific technical dependency or evaluation, the agent MUST assign `BACKGROUND_CONTEXT` with `Neutral` attitude.
 2. **Target Resolution**: The agent queries the existing graph (`kb search` or `kb graph query`) to see if the referenced equation, algorithm, or model already exists.
-3. **Atomic Batch Ingestion**: The agent outputs structured operations into `kb graph batch`:
+3. **Atomic Batch Ingestion**: The agent outputs structured operations into `kb graph batch`. For a nuanced assertion, it uses the unchanged `Claim` entity with `qualifiers`:
    ```json
    {
      "op": "claim",
@@ -222,14 +260,13 @@ The reasoning burden is placed on the agent skill:
      "props": {
        "name": "Dense solver cubic scaling limit",
        "summary": "Full dense factorization incurs O(N^3) complexity on high-dimensional state vectors, motivating sparse band-diagonal solvers.",
-       "reference_type": "EVALUATES_PROPERTY",
-       "attitude": "Negative",
+       "qualifiers": "{\"reference_type\": \"EVALUATES_PROPERTY\", \"attitude\": \"Negative\"}",
        "origin": "raw",
        "sources": ["raw-0005"]
      }
    }
    ```
-   Or for a direct contextual fallback:
+   Or for a direct contextual fallback using a typed edge:
    ```json
    {
      "op": "edge",

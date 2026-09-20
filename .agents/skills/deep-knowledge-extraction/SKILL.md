@@ -60,19 +60,59 @@ Trigger this skill when:
         *   Publication roles: `Algorithm` --`INVENTED_IN`/`ANALYZED_IN`/`STUDIED_IN`/`APPLIED_IN`/`REVIEWED_IN`--> `Document`; `Tool`/`Benchmark` --`DOCUMENTED_IN`/`USED_IN`--> `Document`.
         *   `Quantity` --`HAS_KIND`--> `QuantityKind`.
     *   Every extracted node MUST be connected via at least one relationship edge. Floating nodes with 0 edges are prohibited.
-7.  **Record Citations via `kb doc cite`**: Scan the document's reference section / bibliography for all cited papers and record them using the single mechanical command `kb doc cite`:
+7.  **Deep Cross-Document Reference Extraction**:
+    Move beyond coarse `(Document)-[:CITES]->(Document)` citation edges whenever the paper makes specific technical references to prior algorithms, equations, assumptions, or baselines.
+    *   **Two-Axis Classification (Strictly Decoupled)**:
+        1.  **Functional Reference Type (Intent)**:
+            *   `ADOPTS_FORMULATION`: Reuses an exact formal definition, governing equation, coordinate frame, or representation without alteration. (Domain: `Equation`, `Quantity`, `Model`, `CoordinateFrame`, `Method`, `Algorithm`, `Document`; Range: `Equation`, `Quantity`, `Model`, `CoordinateFrame`).
+            *   `EXTENDS_METHOD`: Builds directly upon an existing algorithm, architecture, pipeline, or proof technique by adding components or expanding state. (Domain: `Method`, `Algorithm`, `System`, `Model`, `Document`; Range: `Method`, `Algorithm`, `System`, `Model`).
+            *   `REVISES_ASSUMPTION`: Modifies, relaxes, or substitutes a theoretical or physical assumption or constraint made in earlier work. (Domain: `Method`, `Algorithm`, `Model`, `Equation`, `Assumption`, `Document`; Range: `Assumption`, `Model`, `Constraint`, `Equation`).
+            *   `EVALUATES_PROPERTY`: Technical analysis, characterization, or investigation of a property (convergence rate, numerical stability, computational complexity, memory scaling, sensitivity). (Domain: `Method`, `Algorithm`, `Model`, `Document`; Range: `Algorithm`, `Equation`, `Model`, `Method`, `Tool`).
+            *   `BENCHMARKS_AGAINST`: Quantitatively or experimentally compares performance against cited work using standardized metrics, tasks, or datasets. (Domain: `Algorithm`, `Method`, `System`, `StateEstimator`, `Document`; Range: `Algorithm`, `Method`, `Dataset`, `Metric`, `Benchmark`, `StateEstimator`).
+            *   `BACKGROUND_CONTEXT`: General attribution, introductory survey, historical positioning, or broad thematic context. **Mandatory Default Fallback**. (Domain: `Document`, `Method`, `Algorithm`, `Concept`; Range: `Document`, `Concept`, `Venue`).
+        2.  **Attitude (Evaluative Valence)**:
+            *   `Positive`: Commends formulation, demonstrates superior robustness/scaling, or praises modularity.
+            *   `Negative`: Identifies bottleneck, asymptotic instability, invalid assumption, or edge-case failure.
+            *   `Neutral`: Standard objective measurement, routine adoption, or introductory citation.
+    *   **Mandatory Default Fallback Rule**:
+        Over 50% of citations in technical literature are neutral contextual mentions. If a citation is merely contextual or introductory without explicit adoption, algorithmic extension, assumption alteration, quantitative benchmarking, or property evaluation, you MUST classify it as `BACKGROUND_CONTEXT` with `Neutral` attitude (or a direct `BACKGROUND_CONTEXT` edge). Do NOT force evaluative misclassifications.
+    *   **Representation Choice**:
+        *   **Direct Typed Edge**: When connecting entities or documents directly with contextual properties:
+            ```bash
+            kb graph upsert-edge EVALUATES_PROPERTY --from Method:meth_ptv2 --to Method:meth_ptv1 \
+              --props '{"aspect": "memory_scaling", "section": "IV-B", "origin": "raw", "sources": ["doc_ptv2"]}'
+            ```
+        *   **Reified Citation-Augmenting Claim**: When capturing a nuanced, evaluative critique or performance comparison with a full assertion summary:
+            ```bash
+            kb graph upsert-claim claim_solver_scaling_bottleneck \
+              --subject Algorithm:alg_sparse_solver \
+              --predicate "evaluates_scaling_limit" \
+              --object Algorithm:alg_dense_cholesky \
+              --props '{
+                "name": "Dense solver cubic scaling limit",
+                "summary": "Full dense Cholesky factorization incurs O(N^3) scaling as trajectory grows, making batch re-linearization intractable in real-time.",
+                "qualifiers": "{\"reference_type\": \"EVALUATES_PROPERTY\", \"attitude\": \"Negative\", \"target_anchor\": \"Section IV-A, Eq. (8)\"}",
+                "origin": "raw",
+                "sources": ["doc_0002"],
+                "confidence": 0.90
+              }'
+            ```
+8.  **Record Citations via `kb doc cite`**: Scan the document's reference section / bibliography for all cited papers and record them using the single mechanical command `kb doc cite`:
     ```bash
     kb doc cite <citing_doc_id> --title "<Full Cited Paper Title>" --year <Year> --url "<DOI or URL>" --ref "<Full Reference String from Bibliography>"
     ```
     *   **Automated Matching & Stub Handling**: The CLI mechanically checks if the cited paper already exists in the graph (as an ingested raw document or existing stub).
         *   If it already exists: the CLI automatically links the `CITES` edge and accumulates provenance without creating duplicates.
         *   If it is a new external paper: the CLI automatically creates a placeholder `Document` stub (`kind: "stub"`) and the `CITES` edge atomically.
-8.  **Run Graph Quality Linting**: After completing extraction, execute `kb graph lint` to verify that 0 floating nodes, missing provenance, or claim formatting errors were introduced.
+9.  **Run Graph Quality Linting**: After completing extraction, execute `kb graph lint` to verify that 0 floating nodes, missing provenance, or claim formatting errors were introduced.
 
 ## Rules
 
 *   **No Prose Summaries**: A document summary is a failure. You must extract the underlying structured facts.
 *   **Mandatory Provenance**: Every `upsert-node`, `upsert-edge`, and `upsert-claim` MUST include `origin` and `sources` in its properties.
+*   **Two-Axis Reference Decoupling**: Never conflate technical reference type (`ADOPTS_FORMULATION`, `EXTENDS_METHOD`, etc.) with evaluative valence (`Positive`, `Negative`, `Neutral`). Use `qualifiers` on `Claim` to record `reference_type` and `attitude`.
+*   **Background Context Fallback**: Avoid hallucinated intent. Always use `BACKGROUND_CONTEXT` for broad, neutral introductory references.
+*   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
 *   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
 *   **Relationship Schema Compatibility**: Always check `kb schema show` and `schema/schema_companion.json` to verify allowed `(from, to)` node labels for each relationship type (e.g. `DEFINED_BY` allows `MotionModel`, `Quantity`, `Algorithm`, etc. to `Equation`, but not generic `Model`; `USES` allows `StateEstimator -> Method` or `System -> Sensor`, but not `Method -> Sensor`).
 *   **Edge Direction & Qualifiers**: Store each edge only in its canonical direction (see companion `storage_convention`). Never store inverse edges (e.g. no `MODELS` — only `MODELLED_BY`). For symmetric edges (`SIMILAR_TO`, `RELATES_TO`, `CONTRADICTS`), store once in either direction. For transitive edges (`SPECIALIZES`, `SUBCLASS_OF`, `HAS_COMPONENT`, `PART_OF`, `DERIVED_FROM`), store only direct links, never inferred closures.
@@ -160,6 +200,24 @@ kb graph upsert-claim claim_drift_01 --subject Method:preint_v2 --predicate "ach
 # Support the claim
 kb graph upsert-edge SUPPORTS --from Document:raw-0001 --to Claim:claim_drift_01 --props '{"origin": "raw", "sources": ["raw-0001"]}'
 
-# Link document to another document it cites
+# Deep Cross-Document Typed Reference (evaluates property of cited algorithm)
+kb graph upsert-edge EVALUATES_PROPERTY --from Method:preint_v2 --to Algorithm:alg_euler_int --props '{
+  "aspect": "numerical_drift",
+  "section": "III-B",
+  "origin": "raw",
+  "sources": ["raw-0001"]
+}'
+
+# Reified Citation-Augmenting Claim (with reference_type, attitude, target_anchor in qualifiers)
+kb graph upsert-claim claim_euler_drift --subject Method:preint_v2 --predicate "evaluates_drift_limit" --object Algorithm:alg_euler_int --props '{
+  "name": "Euler integration drift accumulation",
+  "summary": "Euler integration accumulates unbounded drift under high angular accelerations due to first-order truncation error.",
+  "qualifiers": "{\"reference_type\": \"EVALUATES_PROPERTY\", \"attitude\": \"Negative\", \"target_anchor\": \"Section III-B\"}",
+  "origin": "raw",
+  "sources": ["raw-0001"],
+  "confidence": 0.95
+}'
+
+# Link document to another document it cites (coarse bibliographical citation)
 kb graph upsert-edge CITES --from Document:raw-0001 --to Document:raw-0004 --props '{"origin": "raw", "sources": ["raw-0001"], "confidence": 1.0}'
 ```

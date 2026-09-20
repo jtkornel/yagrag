@@ -638,3 +638,231 @@ def test_graph_lint_sympy_ast_consistency(kb_dir: Path) -> None:
     issues2 = json.loads(res2.output)["issues"]
     sym_issues2 = [i for i in issues2 if i["category"] == "symbolic_consistency" and i["id"] == "eq_sample"]
     assert len(sym_issues2) == 0
+
+
+def test_deep_typed_references_and_claim_qualifiers_lint(tmp_path: Path) -> None:
+    kb = tmp_path / "kb_ref"
+    assert runner.invoke(app, ["init", str(kb)]).exit_code == 0
+
+    # Add migration with Method, Algorithm, Claim and reference edge types
+    mdir = kb / "schema" / "migrations"
+    (mdir / "0002_ref_types.gql").write_text(
+        "CREATE NODE TYPE Method (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE NODE TYPE Algorithm (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE NODE TYPE Claim (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, predicate STRING, object_literal STRING, qualifiers STRING);\n"
+        "CREATE EDGE TYPE ABOUT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE HAS_OBJECT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE EVALUATES_PROPERTY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, aspect STRING, section STRING, context STRING);\n"
+        "CREATE EDGE TYPE EXTENDS_METHOD (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, aspect STRING, section STRING, context STRING);\n"
+        "CREATE EDGE TYPE BACKGROUND_CONTEXT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, aspect STRING, section STRING, context STRING);\n",
+        encoding="utf-8",
+    )
+    assert runner.invoke(app, ["schema", "apply", "--kb", str(kb)]).exit_code == 0
+
+    # 1. Upsert Method and Algorithm
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Method",
+            "--props", json.dumps({
+                "id": "meth_sparse_isam2",
+                "name": "iSAM2 Incremental Smoothing",
+                "summary": "iSAM2 method for incremental factor graph optimization",
+                "origin": "raw",
+                "sources": ["doc_001"],
+            }),
+            "--kb", str(kb),
+        ],
+    )
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-node", "Algorithm",
+            "--props", json.dumps({
+                "id": "alg_dense_cholesky",
+                "name": "Dense Cholesky Factorization",
+                "summary": "Dense direct linear solver",
+                "origin": "raw",
+                "sources": ["doc_001"],
+            }),
+            "--kb", str(kb),
+        ],
+    )
+
+    # 2. Upsert deep typed reference edge
+    res_edge = runner.invoke(
+        app,
+        [
+            "graph", "upsert-edge", "EVALUATES_PROPERTY",
+            "--from", "Method:meth_sparse_isam2",
+            "--to", "Algorithm:alg_dense_cholesky",
+            "--props", json.dumps({
+                "aspect": "computational_scaling",
+                "section": "IV-B",
+                "origin": "raw",
+                "sources": ["doc_001"],
+            }),
+            "--kb", str(kb),
+            "--json",
+        ],
+    )
+    assert res_edge.exit_code == 0, res_edge.output
+
+    # 3. Upsert Claim with valid qualifiers (reference_type and attitude)
+    res_claim = runner.invoke(
+        app,
+        [
+            "graph", "upsert-claim", "claim_eval_cholesky",
+            "--subject", "Method:meth_sparse_isam2",
+            "--predicate", "evaluates_scaling_bottleneck",
+            "--object", "Algorithm:alg_dense_cholesky",
+            "--props", json.dumps({
+                "name": "Dense solver cubic scaling limit",
+                "summary": "Dense Cholesky scales as O(N^3) causing memory and latency bottlenecks.",
+                "qualifiers": json.dumps({
+                    "reference_type": "EVALUATES_PROPERTY",
+                    "attitude": "Negative",
+                    "target_anchor": "Section IV-B",
+                }),
+                "origin": "raw",
+                "sources": ["doc_001"],
+                "confidence": 0.95,
+            }),
+            "--kb", str(kb),
+            "--json",
+        ],
+    )
+    assert res_claim.exit_code == 0, res_claim.output
+
+    # Lint should pass with 0 errors
+    lint_res = runner.invoke(app, ["graph", "lint", "--kb", str(kb), "--json"])
+    assert lint_res.exit_code == 0, lint_res.output
+    lint_data = json.loads(lint_res.output)
+    errs = [i for i in lint_data["issues"] if i["severity"] == "error"]
+    assert len(errs) == 0
+
+    # 4. Upsert Claim with INVALID qualifiers (reference_type and attitude)
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-claim", "claim_bad_qual",
+            "--subject", "Method:meth_sparse_isam2",
+            "--predicate", "evaluates_scaling",
+            "--object", "Algorithm:alg_dense_cholesky",
+            "--props", json.dumps({
+                "name": "Bad qualifier claim",
+                "summary": "Testing invalid qualifiers validation",
+                "qualifiers": json.dumps({
+                    "reference_type": "INVALID_REF_TYPE",
+                    "attitude": "InvalidAttitude",
+                }),
+                "origin": "raw",
+                "sources": ["doc_001"],
+            }),
+            "--kb", str(kb),
+        ],
+    )
+
+    bad_lint = runner.invoke(app, ["graph", "lint", "--kb", str(kb), "--json"])
+    assert bad_lint.exit_code == 1
+    bad_data = json.loads(bad_lint.output)
+    qual_issues = [i for i in bad_data["issues"] if i["category"] == "claim_qualifier"]
+    assert len(qual_issues) == 2
+    assert any("INVALID_REF_TYPE" in i["message"] for i in qual_issues)
+    assert any("InvalidAttitude" in i["message"] for i in qual_issues)
+
+
+def test_lineage_and_consensus_cli(tmp_path: Path) -> None:
+    kb = tmp_path / "kb_lineage"
+    assert runner.invoke(app, ["init", str(kb)]).exit_code == 0
+
+    mdir = kb / "schema" / "migrations"
+    (mdir / "0002_lineage_types.gql").write_text(
+        "CREATE NODE TYPE Method (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE NODE TYPE Algorithm (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE NODE TYPE Claim (id STRING, name STRING, summary STRING, origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, predicate STRING, object_literal STRING, qualifiers STRING);\n"
+        "CREATE EDGE TYPE ABOUT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE HAS_OBJECT (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP);\n"
+        "CREATE EDGE TYPE EXTENDS_METHOD (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, aspect STRING, section STRING, context STRING);\n"
+        "CREATE EDGE TYPE EVALUATES_PROPERTY (origin STRING, sources LIST, confidence FLOAT64, created_at TIMESTAMP, updated_at TIMESTAMP, aspect STRING, section STRING, context STRING);\n",
+        encoding="utf-8",
+    )
+    assert runner.invoke(app, ["schema", "apply", "--kb", str(kb)]).exit_code == 0
+
+    # Insert m1 (base), m2 (extends m1), m3 (extends m2)
+    for mid, mname in [("m1", "Base Method"), ("m2", "Extension 1"), ("m3", "Extension 2")]:
+        runner.invoke(
+            app,
+            [
+                "graph", "upsert-node", "Method",
+                "--props", json.dumps({"id": mid, "name": mname, "summary": f"Summary for {mid}", "origin": "raw", "sources": ["doc1"]}),
+                "--kb", str(kb),
+            ],
+        )
+
+    # m2 -[EXTENDS_METHOD]-> m1
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-edge", "EXTENDS_METHOD",
+            "--from", "Method:m2", "--to", "Method:m1",
+            "--props", json.dumps({"aspect": "dynamic_covariance", "section": "III-A", "origin": "raw", "sources": ["doc1"]}),
+            "--kb", str(kb),
+        ],
+    )
+    # m3 -[EXTENDS_METHOD]-> m2
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-edge", "EXTENDS_METHOD",
+            "--from", "Method:m3", "--to", "Method:m2",
+            "--props", json.dumps({"aspect": "sliding_window", "section": "IV-B", "origin": "raw", "sources": ["doc2"]}),
+            "--kb", str(kb),
+        ],
+    )
+
+    # Add Claim evaluating m1
+    runner.invoke(
+        app,
+        [
+            "graph", "upsert-claim", "claim_eval_m1",
+            "--subject", "Method:m2",
+            "--predicate", "identifies_limitation",
+            "--object", "Method:m1",
+            "--props", json.dumps({
+                "name": "Static covariance drift",
+                "summary": "Fixed covariance assumption leads to filter divergence under high slip.",
+                "qualifiers": json.dumps({"reference_type": "EVALUATES_PROPERTY", "attitude": "Negative"}),
+                "origin": "raw",
+                "sources": ["doc1"],
+            }),
+            "--kb", str(kb),
+        ],
+    )
+
+    # Test kb graph lineage m3 --direction upstream
+    lin_res = runner.invoke(app, ["graph", "lineage", "m3", "--direction", "upstream", "--kb", str(kb), "--json"])
+    assert lin_res.exit_code == 0, lin_res.output
+    lin_data = json.loads(lin_res.output)
+    assert lin_data["entity_id"] == "m3"
+    assert lin_data["upstream_count"] == 2
+    upstream_ids = [u["target_id"] for u in lin_data["upstream"]]
+    assert upstream_ids == ["m2", "m1"]
+
+    # Test kb graph lineage m1 --direction downstream
+    lin_down = runner.invoke(app, ["graph", "lineage", "m1", "--direction", "downstream", "--kb", str(kb), "--json"])
+    assert lin_down.exit_code == 0, lin_down.output
+    down_data = json.loads(lin_down.output)
+    assert down_data["downstream_count"] == 2
+    downstream_ids = [d["target_id"] for d in down_data["downstream"]]
+    assert downstream_ids == ["m2", "m3"]
+
+    # Test kb graph consensus m1
+    cons_res = runner.invoke(app, ["graph", "consensus", "m1", "--kb", str(kb), "--json"])
+    assert cons_res.exit_code == 0, cons_res.output
+    cons_data = json.loads(cons_res.output)
+    assert cons_data["entity_id"] == "m1"
+    assert cons_data["total_evaluations"] == 2  # 1 claim + 1 incoming EXTENDS_METHOD edge
+    assert cons_data["attitudes"]["Negative"] == 1
+    assert cons_data["attitudes"]["Neutral"] == 1
+

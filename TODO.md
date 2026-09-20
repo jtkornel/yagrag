@@ -29,19 +29,19 @@ Directly actionable items ready for implementation:
     * Update `deep-knowledge-extraction` skill to list figures and inspect diagrams (factor graphs, kinematic chains, block diagrams) using multimodal VLM capabilities to populate domain graph nodes.
 * **Reference**: Proposal in [`docs/proposal_document_and_diagram_extraction.md`](docs/proposal_document_and_diagram_extraction.md).
 
-## 3. Typed Claims and Deep Cross-Document References
+## 3. [x] Typed Claims and Deep Cross-Document References (Completed)
 * **Goal**: Extend citation modeling from coarse, untyped `(Document)-[:CITES]->(Document)` edges down to deep references linking specific domain entities (`Method`, `Equation`, `Algorithm`, `Model`, `Assumption`, `Dataset`) across documents, with a decoupled technical taxonomy and evaluative attitude.
 * **Scope**:
   * **Schema Migrations (`schema/migrations/0006_deep_typed_references.gql`)**:
     * Add typed citation relationship edges with contextual qualifiers (`context`, `section`, `target_ref`, `aspect`):
       * `ADOPTS_FORMULATION`, `EXTENDS_METHOD`, `REVISES_ASSUMPTION`, `EVALUATES_PROPERTY`, `BENCHMARKS_AGAINST`, and `BACKGROUND_CONTEXT`.
     * Update `schema/schema_companion.json` to define allowed `(from, to)` node labels and canonical directionality rules for each reference relation type.
-  * **Decoupled Evaluative Claims**:
-    * Support reified `Claim` nodes carrying both a functional `reference_type` enum (one of the 6 technical categories) and an independent `attitude` enum (`Positive`, `Negative`, `Neutral`), avoiding conflation between property analysis and sentiment.
+  * **Decoupled Evaluative Claims (Unchanged `Claim` Schema)**:
+    * Reify nuanced cross-document claims via existing `Claim` nodes without schema alterations, capturing `reference_type` and `attitude` enums inside the standard `qualifiers` JSON map to preserve `Claim`'s generic applicability across all document facts.
     * Enforce `BACKGROUND_CONTEXT` as the default non-evaluative fallback for general or introductory citations to prevent forced misclassification.
   * **Deterministic CLI & Graph Linting**:
     * Support deep edges in `kb graph upsert-edge` and `kb graph batch`.
-    * Extend `kb graph lint` to validate reference types, attitude enums, and non-empty provenance on deep reference edges and reified claims.
+    * Extend `kb graph lint` to validate non-empty provenance and verify that any optional `reference_type` or `attitude` in claim `qualifiers` matches valid enum values.
     * Add typed lineage and consensus query support (e.g. `kb graph lineage <entity_id>` or `kb graph consensus <entity_id>`).
   * **Agent Skill Integration (`deep-knowledge-extraction`)**:
     * Update `.agents/skills/deep-knowledge-extraction/SKILL.md` to instruct the agent to resolve cross-document references to fine-grained target entities (or entity stubs), classifying them along the two decoupled axes (functional intent and evaluative attitude).

@@ -1,0 +1,39 @@
+-- Migration 0006: Deep Typed References and Cross-Document Citations.
+-- Companion semantics: schema/schema_companion.json
+-- Reference proposal: docs/integrating_typed_claims_and_deep_references.md
+
+CREATE EDGE TYPE ADOPTS_FORMULATION (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    context STRING, section STRING, target_ref STRING
+);
+
+CREATE EDGE TYPE EXTENDS_METHOD (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    context STRING, section STRING, target_ref STRING
+);
+
+CREATE EDGE TYPE REVISES_ASSUMPTION (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    aspect STRING, context STRING, target_ref STRING
+);
+
+CREATE EDGE TYPE EVALUATES_PROPERTY (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    aspect STRING, context STRING, target_ref STRING
+);
+
+CREATE EDGE TYPE BENCHMARKS_AGAINST (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    dataset_id STRING, metric_id STRING, context STRING
+);
+
+CREATE EDGE TYPE BACKGROUND_CONTEXT (
+    origin STRING, sources LIST, confidence FLOAT64,
+    created_at TIMESTAMP, updated_at TIMESTAMP,
+    context STRING, section STRING, target_ref STRING
+);

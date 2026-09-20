@@ -168,8 +168,8 @@
     },
     "Claim": {
       "label": "claim",
-      "description": "A reified statement: subject (via ABOUT), predicate, and object (via HAS_OBJECT to an entity, or object_literal). Used for facts that need qualifiers or provenance beyond a plain edge.",
-      "extra_properties": {"predicate": "relation name", "object_literal": "literal object if not an entity", "qualifiers": "JSON-encoded qualifier map"}
+      "description": "A reified statement: subject (via ABOUT), predicate, and object (via HAS_OBJECT to an entity, or object_literal). Used for facts that need qualifiers or provenance beyond a plain edge. For nuanced cross-document citation claims, citation classification (reference_type, attitude, target_anchor) is encapsulated in qualifiers.",
+      "extra_properties": {"predicate": "relation name", "object_literal": "literal object if not an entity", "qualifiers": "JSON-encoded qualifier map (may include reference_type, attitude, target_anchor)"}
     },
     "Acronym": {
       "label": "acronym",
@@ -528,6 +528,54 @@
       "domain": ["Quantity"], "range": ["QuantityKind"],
       "transitive": false, "symmetric": false, "inverse_of": null,
       "mardi_source": "MathModDB quantity/quantity kind split (Q6534237/Q6534245)"
+    },
+    "ADOPTS_FORMULATION": {
+      "label": "adopts formulation",
+      "description": "Reuses an exact formal definition, governing equation, coordinate definition, or representation without alteration.",
+      "usage": "Direct structural citation edge linking a citing entity to a cited Equation, Quantity, Model, or CoordinateFrame.",
+      "domain": ["Equation", "Quantity", "Model", "CoordinateFrame", "Method", "Algorithm", "Document"],
+      "range": ["Equation", "Quantity", "Model", "CoordinateFrame"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "EXTENDS_METHOD": {
+      "label": "extends method",
+      "description": "Builds directly upon an existing algorithm, architecture, pipeline, or proof technique by adding components, generalizing steps, or expanding the state/parameter space.",
+      "usage": "Direct structural citation edge linking a citing entity to a cited Method, Algorithm, System, or Model.",
+      "domain": ["Method", "Algorithm", "System", "Model", "Document"],
+      "range": ["Method", "Algorithm", "System", "Model"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "REVISES_ASSUMPTION": {
+      "label": "revises assumption",
+      "description": "Explicitly questions, modifies, relaxes, or substitutes a theoretical or physical assumption or constraint made in earlier work.",
+      "usage": "Direct structural citation edge linking a citing entity to a cited Assumption, Model, Constraint, or Equation.",
+      "domain": ["Method", "Algorithm", "Model", "Equation", "Assumption", "Document"],
+      "range": ["Assumption", "Model", "Constraint", "Equation"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "EVALUATES_PROPERTY": {
+      "label": "evaluates property",
+      "description": "Formulates a technical analysis, characterization, or investigation of a property (e.g., convergence rate, numerical stability, computational complexity, memory scaling, sensitivity, bias) of the cited artifact.",
+      "usage": "Direct structural citation edge linking a citing entity to a cited Algorithm, Equation, Model, Method, or Tool.",
+      "domain": ["Method", "Algorithm", "Model", "Document"],
+      "range": ["Algorithm", "Equation", "Model", "Method", "Tool"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "BENCHMARKS_AGAINST": {
+      "label": "benchmarks against",
+      "description": "Quantitatively or experimentally compares performance against the cited work using standardized metrics, tasks, or datasets.",
+      "usage": "Direct structural citation edge linking a citing entity to a cited Algorithm, Method, Dataset, Metric, or Benchmark.",
+      "domain": ["Algorithm", "Method", "System", "StateEstimator", "Document"],
+      "range": ["Algorithm", "Method", "Dataset", "Metric", "Benchmark", "StateEstimator"],
+      "transitive": false, "symmetric": false, "inverse_of": null
+    },
+    "BACKGROUND_CONTEXT": {
+      "label": "background context",
+      "description": "General attribution, introductory survey, historical positioning, or broad thematic context with no direct mathematical or algorithmic dependency. Default non-evaluative fallback.",
+      "usage": "Default citation edge when citations do not exhibit explicit adoption, extension, revision, benchmarking, or property evaluation.",
+      "domain": ["Document", "Method", "Algorithm", "Concept"],
+      "range": ["Document", "Concept", "Venue"],
+      "transitive": false, "symmetric": false, "inverse_of": null
     }
   }
 }
