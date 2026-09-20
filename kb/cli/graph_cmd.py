@@ -739,7 +739,7 @@ def cmd_lint(
                                     "message": f"Claim {cid} 'qualifiers' JSON is not an object.",
                                 }
                             )
-                    except Exception as e:
+                    except _json.JSONDecodeError as e:
                         issues.append(
                             {
                                 "category": "claim_qualifier",
@@ -1168,8 +1168,16 @@ def cmd_lint(
                                     "message": f"Reference edge {edge_id} is missing required provenance 'sources'.",
                                 }
                             )
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    issues.append(
+                        {
+                            "category": "reference_edge",
+                            "severity": "error",
+                            "id": ret,
+                            "node_type": ret,
+                            "message": f"Failed querying reference edges for {ret}: {exc}",
+                        }
+                    )
     finally:
         g.close()
 
@@ -1550,7 +1558,7 @@ def cmd_lineage(
 
                     try:
                         rows = g.execute(q, {"curr_id": curr_id})
-                    except Exception:
+                    except Exception:  # noqa: BLE001
                         rows = []
 
                     for row in rows:
@@ -1675,7 +1683,7 @@ def cmd_consensus(
             )
             try:
                 c_rows = g.execute(claim_q, {"id": entity_id})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 c_rows = []
 
             for r in c_rows:
@@ -1692,8 +1700,8 @@ def cmd_consensus(
                             attitude = q_parsed.get("attitude") or "Neutral"
                             ref_type = q_parsed.get("reference_type")
                             aspect = q_parsed.get("aspect") or q_parsed.get("target_anchor")
-                    except Exception:
-                        pass
+                    except (_json.JSONDecodeError, TypeError, ValueError):
+                        attitude = "Neutral"
 
                 att_key = attitude if attitude in attitude_counts else "Unknown"
                 attitude_counts[att_key] += 1
@@ -1723,7 +1731,7 @@ def cmd_consensus(
             )
             try:
                 e_rows = g.execute(edge_q, {"id": entity_id})
-            except Exception:
+            except Exception:  # noqa: BLE001
                 e_rows = []
 
             for er in e_rows:

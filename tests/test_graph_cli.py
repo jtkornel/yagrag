@@ -371,7 +371,7 @@ def test_acronym_lint_checks(kb_dir: Path) -> None:
         ],
     )
     res = runner.invoke(app, ["graph", "lint", "--kb", str(kb_dir), "--json"])
-    assert res.exit_code == 0
+    assert res.exit_code == 1
     data = json.loads(res.output)
     categories = [i["category"] for i in data["issues"]]
     assert "acronym_quality" in categories
