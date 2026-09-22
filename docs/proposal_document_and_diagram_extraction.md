@@ -73,11 +73,7 @@ To guarantee that cached artifacts never fall out of sync with the underlying ra
   "source_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "extractor": "docling",
   "extractor_version": "2.12.0",
-  "extracted_at": "2026-09-20T10:15:30Z",
-  "has_figures": true,
-  "figure_count": 4,
-  "tables_count": 2,
-  "equations_count": 14
+  "extracted_at": "2026-09-20T10:15:30Z"
 }
 ```
 

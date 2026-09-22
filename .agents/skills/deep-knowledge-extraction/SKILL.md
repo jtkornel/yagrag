@@ -15,8 +15,14 @@ Trigger this skill when:
 ## Steps
 
 1.  **Read Text & Extract Layout**:
-    *   Run `kb doc text <id>` to inspect document text (transparently triggers Docling parsing and caches markdown, JSON AST, and figures).
-    *   Run `kb doc figures <id>` to inspect visual assets (diagrams, flowcharts, system architectures, plots) extracted from the document.
+    *   **Outline & Structure Discovery**: Run `kb doc outline <id> --items` to inspect the hierarchical section structure, pages, and discovered leaf items (tables, formulas, pictures) along with their JSON Pointer `cref` identifiers.
+    *   **Targeted Item Extraction**: Fetch specific AST items without loading entire large texts into context:
+        *   `kb doc tables <id>`: List all tables; inspect specific tables via `kb doc tables <id> -i <idx> [--format md|html|json]`.
+        *   `kb doc equations <id>`: List isolated mathematical formulations with LaTeX representations; view specific formulas via `kb doc equations <id> -i <idx>`.
+        *   `kb doc item <id> <cref>`: Fetch any discovered AST node directly via its RFC 6901 pointer (e.g. `#/tables/0`, `#/texts/12`).
+    *   **Full Text & Visual Assets**:
+        *   Run `kb doc text <id>` to inspect document text (transparently triggers Docling parsing and caches markdown, JSON AST, and figures).
+        *   Run `kb doc figures <id>` to inspect visual assets (diagrams, flowcharts, system architectures, plots) extracted from the document.
     *   **Visual Inspection (Multimodal Agent)**: If a diagram contains key architecture pipelines, sensor layouts, factor graph sketches, or benchmark charts not fully articulated in text, read the figure image file (under `documents/cache/<id>/figures/`) with your vision/multimodal capabilities to extract architectural entities, factor graph structures, or performance claims.
 2.  **Identify Entities**: Scan the text and extracted figures for nodes matching the seed schema. Consult `schema/schema_companion.json` for per-type semantics and examples. Look for:
     *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `QuantityKind` (abstract quantity types like length/time, only when the text treats them generically), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
@@ -49,7 +55,8 @@ Trigger this skill when:
     *   `StateEstimator` --`USES`--> `Algorithm` / `Method` / `MotionModel` / `SensorModel` / `FactorGraph` / `Solver`.
     *   `Any Node` --`USES_ACRONYM`--> `Acronym`: Link any method, estimator, model, algorithm, equation, dataset, or concept whose definition/text uses the acronym.
     *   `Acronym` --`STANDS_FOR`--> `Concept` / `StateEstimator` / `Method`: Link the acronym to the formal domain entity it represents.
-    *   `Quantity` --`DEFINED_BY`--> `Equation`: Use `DEFINED_BY` strictly when the `Equation` computes or defines this target output quantity (left-hand side / LHS).
+    *   `Quantity` --`EXPRESSED_BY`--> `Equation`: Standard neutral relationship indicating that a target output quantity (left-hand side / LHS) is computed or expressed by an `Equation`.
+    *   `Quantity` --`DEFINED_BY`--> `Equation`: Reserved specifically for defining equations that formally define the concept/quantity itself (both `EXPRESSED_BY` and `DEFINED_BY` are recognized by `kb math`).
     *   `Equation` --`USES_SYMBOL`--> `Quantity`: Link the `Equation` to all input terms, intermediate symbols, normalization constants, and sub-expression parameters appearing inside its expression.
     *   `FactorGraph` --`HAS_VARIABLE`--> `Variable`, `FactorGraph` --`HAS_FACTOR`--> `Factor`.
     *   `Algorithm` / `Method` / `System` --`EVALUATED_ON`--> `Dataset` / `Metric`.
@@ -115,7 +122,6 @@ Trigger this skill when:
 *   **Mandatory Provenance**: Every `upsert-node`, `upsert-edge`, and `upsert-claim` MUST include `origin` and `sources` in its properties.
 *   **Two-Axis Reference Decoupling**: Never conflate technical reference type (`ADOPTS_FORMULATION`, `EXTENDS_METHOD`, etc.) with evaluative valence (`Positive`, `Negative`, `Neutral`). Use `qualifiers` on `Claim` to record `reference_type` and `attitude`.
 *   **Background Context Fallback**: Avoid hallucinated intent. Always use `BACKGROUND_CONTEXT` for broad, neutral introductory references.
-*   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
 *   **Reified Claims**: Claims are nodes themselves. Don't just make them properties of another node; use the `Claim` node type with short `name` labels and full sentence `summary` assertions.
 *   **Relationship Schema Compatibility**: Always check `kb schema show` and `schema/schema_companion.json` to verify allowed `(from, to)` node labels for each relationship type (e.g. `DEFINED_BY` allows `MotionModel`, `Quantity`, `Algorithm`, etc. to `Equation`, but not generic `Model`; `USES` allows `StateEstimator -> Method` or `System -> Sensor`, but not `Method -> Sensor`).
 *   **Edge Direction & Qualifiers**: Store each edge only in its canonical direction (see companion `storage_convention`). Never store inverse edges (e.g. no `MODELS` — only `MODELLED_BY`). For symmetric edges (`SIMILAR_TO`, `RELATES_TO`, `CONTRADICTS`), store once in either direction. For transitive edges (`SPECIALIZES`, `SUBCLASS_OF`, `HAS_COMPONENT`, `PART_OF`, `DERIVED_FROM`), store only direct links, never inferred closures.
@@ -185,8 +191,9 @@ kb graph upsert-node Quantity --props '{
 # Link document to the equation
 kb graph upsert-edge DEFINES --from Document:raw-0001 --to Equation:eq_imu_preint --props '{"origin": "raw", "sources": ["raw-0001"]}'
 
-# Link LHS defined quantity: (Quantity)-[:DEFINED_BY]->(Equation)
-kb graph upsert-edge DEFINED_BY --from Quantity:qty_delta_R_ij --to Equation:eq_imu_preint --props '{"origin": "raw", "sources": ["raw-0001"]}'
+# Link LHS output quantity: (Quantity)-[:EXPRESSED_BY]->(Equation)
+# (Use EXPRESSED_BY as the standard neutral relation for LHS outputs; reserve DEFINED_BY for formal definition equations)
+kb graph upsert-edge EXPRESSED_BY --from Quantity:qty_delta_R_ij --to Equation:eq_imu_preint --props '{"origin": "raw", "sources": ["raw-0001"]}'
 
 # Link input terms and intermediate parameters: (Equation)-[:USES_SYMBOL]->(Quantity)
 kb graph upsert-edge USES_SYMBOL --from Equation:eq_imu_preint --to Quantity:qty_omega_k --props '{"origin": "raw", "sources": ["raw-0001"]}'

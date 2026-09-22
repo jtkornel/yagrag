@@ -354,19 +354,30 @@ class DocumentStore:
             if cached_text is not None:
                 return cached_text
 
-        # Markdown and plain text files don't need heavy ML layout parsing
+        docling_ver = getattr(docling, "__version__", "2.0")
+
         if rec.format in ("md", "txt"):
-            content = path.read_text(encoding="utf-8")
+            converter = DocumentConverter()
+            result = converter.convert(str(path))
+            doc = result.document
+
+            content_md = doc.export_to_markdown()
+
+            try:
+                doc_ast = doc.export_to_dict()
+            except (RuntimeError, ValueError, TypeError):
+                doc_ast = None
+
             self.cache.write_cache(
                 doc_id=doc_id,
                 source_hash=rec.hash,
-                content=content,
-                extractor="builtin",
-                extractor_version="1.0",
-                document_ast=None,
+                content=content_md,
+                extractor="docling",
+                extractor_version=docling_ver,
+                document_ast=doc_ast,
                 figures=None,
             )
-            return content
+            return content_md
 
         if rec.format == "pdf":
             pipeline_options = PdfPipelineOptions()
@@ -433,16 +444,10 @@ class DocumentStore:
                     except (OSError, RuntimeError, ValueError):
                         continue
 
-            # Serialized AST
-            docling_ver = getattr(docling, "__version__", "2.0")
-
             try:
                 doc_ast = doc.export_to_dict()
             except (RuntimeError, ValueError, TypeError):
                 doc_ast = None
-
-            tables_count = len(getattr(doc, "tables", []))
-            equations_count = len(getattr(doc, "equations", [])) if hasattr(doc, "equations") else 0
 
             self.cache.write_cache(
                 doc_id=doc_id,
@@ -452,8 +457,6 @@ class DocumentStore:
                 extractor_version=docling_ver,
                 document_ast=doc_ast,
                 figures=extracted_figures,
-                tables_count=tables_count,
-                equations_count=equations_count,
             )
             return content_md
 

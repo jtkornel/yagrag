@@ -43,10 +43,6 @@ class CacheMetadata:
     extractor: str
     extractor_version: str
     extracted_at: str
-    has_figures: bool = False
-    figure_count: int = 0
-    tables_count: int = 0
-    equations_count: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -59,10 +55,6 @@ class CacheMetadata:
             extractor=data.get("extractor", "docling"),
             extractor_version=data.get("extractor_version", ""),
             extracted_at=data.get("extracted_at", ""),
-            has_figures=data.get("has_figures", False),
-            figure_count=data.get("figure_count", 0),
-            tables_count=data.get("tables_count", 0),
-            equations_count=data.get("equations_count", 0),
         )
 
 
@@ -131,6 +123,18 @@ class CacheManager:
                 return None
         return None
 
+    def read_docling_document(self, doc_id: str) -> Any | None:
+        """Read cached document.json and parse as a DoclingDocument object."""
+        doc_dict = self.read_document_json(doc_id)
+        if doc_dict is None:
+            return None
+        try:
+            from docling_core.types.doc.document import DoclingDocument
+
+            return DoclingDocument.model_validate(doc_dict)
+        except (ValueError, TypeError, KeyError):
+            return None
+
     def list_figures(self, doc_id: str) -> list[FigureMetadata]:
         """List all extracted figures with metadata for a document."""
         fig_dir = self.figures_dir(doc_id)
@@ -164,8 +168,6 @@ class CacheManager:
         extractor_version: str = "",
         document_ast: dict[str, Any] | None = None,
         figures: list[tuple[FigureMetadata, bytes]] | None = None,
-        tables_count: int = 0,
-        equations_count: int = 0,
     ) -> CacheMetadata:
         """Populate cache directory for doc_id atomically / cleanly."""
         target_dir = self.doc_cache_dir(doc_id)
@@ -183,7 +185,6 @@ class CacheManager:
             )
 
         # Save figures if any
-        fig_count = 0
         if figures:
             fig_dir = self.figures_dir(doc_id)
             fig_dir.mkdir(parents=True, exist_ok=True)
@@ -199,7 +200,6 @@ class CacheManager:
                     json.dumps(asdict(fig_meta), indent=2) + "\n",
                     encoding="utf-8",
                 )
-                fig_count += 1
 
         meta = CacheMetadata(
             doc_id=doc_id,
@@ -207,10 +207,6 @@ class CacheManager:
             extractor=extractor,
             extractor_version=extractor_version,
             extracted_at=_utcnow(),
-            has_figures=fig_count > 0,
-            figure_count=fig_count,
-            tables_count=tables_count,
-            equations_count=equations_count,
         )
 
         self.meta_path(doc_id).write_text(
