@@ -12,7 +12,9 @@ the tree.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import shutil
 from dataclasses import dataclass
@@ -20,7 +22,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import docling
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
 from ..config import KBConfig
+from .cache import CacheManager, FigureMetadata
 
 DocKind = Literal["raw", "synthesized"]
 
@@ -133,6 +141,10 @@ class DocumentStore:
         self.kb_root = kb_root.expanduser().resolve()
         self.config = config or KBConfig.load(self.kb_root)
         self.manifest_path = self.kb_root / self.config.paths.manifest
+        self.cache = CacheManager(
+            self.kb_root,
+            cache_rel_path=getattr(self.config.paths, "cache", "documents/cache"),
+        )
 
     # --- manifest ------------------------------------------------------------
 
@@ -316,6 +328,8 @@ class DocumentStore:
         meta = stored.with_name(stored.name + ".meta.json")
         if meta.exists():
             meta.unlink()
+        # Invalidate any cached extraction artifacts
+        self.cache.invalidate(doc_id)
         manifest = self._load_manifest()
         manifest["documents"] = [
             d for d in manifest["documents"] if d["id"] != doc_id
@@ -323,24 +337,136 @@ class DocumentStore:
         self._save_manifest(manifest)
         return rec
 
-    # --- text extraction ---------------------------------------------------------
+    # --- text extraction & parsing ----------------------------------------------
 
-    def extract_text(self, doc_id: str) -> str:
-        """Return the plain-text content of a stored document.
+    def parse_document(self, doc_id: str, force: bool = False) -> str:
+        """Parse a document and cache its markdown, AST, and figures.
 
-        Markdown/text files are read as-is; PDFs are extracted with pypdf.
+        Uses Docling for layout and diagram aware extraction.
+        Returns the extracted markdown content.
         """
         rec = self.get(doc_id)
         path = self.kb_root / rec.path
+
+        # If cache is valid and not forced, return cached content
+        if not force and self.cache.is_valid(doc_id, rec.hash):
+            cached_text = self.cache.read_content(doc_id)
+            if cached_text is not None:
+                return cached_text
+
+        # Markdown and plain text files don't need heavy ML layout parsing
         if rec.format in ("md", "txt"):
-            return path.read_text(encoding="utf-8")
+            content = path.read_text(encoding="utf-8")
+            self.cache.write_cache(
+                doc_id=doc_id,
+                source_hash=rec.hash,
+                content=content,
+                extractor="builtin",
+                extractor_version="1.0",
+                document_ast=None,
+                figures=None,
+            )
+            return content
+
         if rec.format == "pdf":
+            pipeline_options = PdfPipelineOptions()
+            pipeline_options.do_ocr = False
+            pipeline_options.generate_picture_images = bool(
+                self.config.documents.extract_figures
+            )
+            pipeline_options.images_scale = float(self.config.documents.figure_dpi) / 72.0
+
+            converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+                }
+            )
+
+            result = converter.convert(str(path))
+            doc = result.document
+
+            # Extract markdown
+            content_md = doc.export_to_markdown()
+
+            # Extract figures
+            extracted_figures: list[tuple[FigureMetadata, bytes]] = []
+            if self.config.documents.extract_figures and hasattr(doc, "pictures"):
+                fig_dir_rel = f"documents/cache/{doc_id}/figures"
+                for idx, pic in enumerate(doc.pictures):
+                    try:
+                        pil_img = pic.get_image(doc)
+                        if pil_img is None:
+                            continue
+                        buf = io.BytesIO()
+                        pil_img.save(buf, format="PNG")
+                        img_bytes = buf.getvalue()
+
+                        page_no = 1
+                        bbox_coords: list[float] = []
+                        if hasattr(pic, "prov") and pic.prov:
+                            p0 = pic.prov[0]
+                            page_no = getattr(p0, "page_no", 1)
+                            bb = getattr(p0, "bbox", None)
+                            if bb is not None:
+                                bbox_coords = [
+                                    getattr(bb, "l", 0.0),
+                                    getattr(bb, "t", 0.0),
+                                    getattr(bb, "r", 0.0),
+                                    getattr(bb, "b", 0.0),
+                                ]
+
+                        caption_text = ""
+                        if hasattr(pic, "caption_text"):
+                            with contextlib.suppress(Exception):
+                                caption_text = pic.caption_text(doc) or ""
+
+                        fig_id = f"fig_{idx:03d}_p{page_no}"
+                        rel_img_path = f"{fig_dir_rel}/{fig_id}.png"
+                        fig_meta = FigureMetadata(
+                            id=fig_id,
+                            page=page_no,
+                            bbox=bbox_coords,
+                            caption=caption_text,
+                            image_path=rel_img_path,
+                        )
+                        extracted_figures.append((fig_meta, img_bytes))
+                    except (OSError, RuntimeError, ValueError):
+                        continue
+
+            # Serialized AST
+            docling_ver = getattr(docling, "__version__", "2.0")
+
             try:
-                from pypdf import PdfReader  # type: ignore
-            except ImportError as exc:
-                raise StoreError(
-                    "pypdf is not installed; install with `pip install .[pdf]`"
-                ) from exc
-            reader = PdfReader(str(path))
-            return "\n\n".join((page.extract_text() or "") for page in reader.pages)
+                doc_ast = doc.export_to_dict()
+            except (RuntimeError, ValueError, TypeError):
+                doc_ast = None
+
+            tables_count = len(getattr(doc, "tables", []))
+            equations_count = len(getattr(doc, "equations", [])) if hasattr(doc, "equations") else 0
+
+            self.cache.write_cache(
+                doc_id=doc_id,
+                source_hash=rec.hash,
+                content=content_md,
+                extractor="docling",
+                extractor_version=docling_ver,
+                document_ast=doc_ast,
+                figures=extracted_figures,
+                tables_count=tables_count,
+                equations_count=equations_count,
+            )
+            return content_md
+
         raise UnsupportedFormatError(f"cannot extract text from format {rec.format!r}")
+
+    def extract_text(self, doc_id: str) -> str:
+        """Return the plain-text/markdown content of a stored document.
+
+        Checks the cache first. If cache is invalid or missing, parses the document.
+        """
+        rec = self.get(doc_id)
+        if self.cache.is_valid(doc_id, rec.hash):
+            cached = self.cache.read_content(doc_id)
+            if cached is not None:
+                return cached
+        return self.parse_document(doc_id)

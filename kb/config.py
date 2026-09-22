@@ -33,6 +33,7 @@ class PathsConfig(BaseModel):
     raw: str = "documents/raw"
     synthesized: str = "documents/synthesized"
     manifest: str = "documents/manifest.json"
+    cache: str = "documents/cache"
     schema_dir: str = Field(default="schema", alias="schema")
     graph_db: str = "graph.tvdb"
     code: str = "code"
@@ -54,6 +55,8 @@ class DocumentsConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     require_doi: bool = True
+    extract_figures: bool = True
+    figure_dpi: int = 150
 
 
 def _parse_semver(v: str) -> tuple[int, ...]:
@@ -142,6 +145,7 @@ class KBConfig(BaseModel):
         lines.append(f'raw = "{self.paths.raw}"')
         lines.append(f'synthesized = "{self.paths.synthesized}"')
         lines.append(f'manifest = "{self.paths.manifest}"')
+        lines.append(f'cache = "{self.paths.cache}"')
         lines.append(f'schema = "{self.paths.schema_dir}"')
         lines.append(f'graph_db = "{self.paths.graph_db}"')
         lines.append(f'code = "{self.paths.code}"')
@@ -153,5 +157,7 @@ class KBConfig(BaseModel):
         lines.append("")
         lines.append("[documents]")
         lines.append(f"require_doi = {'true' if self.documents.require_doi else 'false'}")
+        lines.append(f"extract_figures = {'true' if self.documents.extract_figures else 'false'}")
+        lines.append(f"figure_dpi = {self.documents.figure_dpi}")
         lines.append("")
         return "\n".join(lines)

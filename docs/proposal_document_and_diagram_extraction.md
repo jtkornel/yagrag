@@ -11,7 +11,7 @@ In `yagrag`, the current document ingestion and extraction pipeline treats PDF h
 This document outlines an improved extraction architecture for `yagrag`. It evaluates contemporary extraction backends—highlighting **[Docling](https://github.com/docling-project/docling)** (IBM Granite Docling model family)—and specifies:
 1. An **intermediate storage & caching subsystem** (`documents/cache/<doc_id>/`) that avoids repetitive parsing while remaining excluded from Git for copyright hygiene.
 2. A **diagram extraction and visual artifact pipeline** that crops and exports figures and tables for agent inspection using Vision-Language Models (VLMs).
-3. A **tiered, plugin-based backend design** maintaining `yagrag`'s strict core invariant: a fast, lightweight, deterministic CLI with heavy ML backends packaged cleanly as optional extras.
+3. A **direct Docling integration** without fallbacks or custom wrapper interfaces: Docling serves as the single document extraction engine for the project, simplifying the architecture while providing full structural and visual fidelity.
 
 ---
 
@@ -21,12 +21,12 @@ To balance runtime speed, dependency weight, layout comprehension, mathematical 
 
 | Extractor / Pipeline | Layout & Reading Order | Math & Table Quality | Diagram / Figure Cropping | Execution Speed & Resource Footprint | Dependencies & Licensing | Recommendation for `yagrag` |
 |---|---|---|---|---|---|---|
-| **`pypdf`** *(Current)* | Poor (linear byte-stream order; breaks on 2-column papers) | Poor (no table structures; math characters garbled) | None (extracts raw text streams only) | Extremely fast (<0.1s/doc); minimal memory (<20MB) | Pure Python, MIT license, zero heavy dependencies | Retain as **Tier 1 (Fallback / Baseline)** for minimal environments and CI tests. |
+| **`pypdf`** *(Legacy)* | Poor (linear byte-stream order; breaks on 2-column papers) | Poor (no table structures; math characters garbled) | None (extracts raw text streams only) | Extremely fast (<0.1s/doc); minimal memory (<20MB) | Pure Python, MIT license, zero heavy dependencies | Deprecated/removed in favor of unified Docling engine. |
 | **PyMuPDF (`fitz`)** | Moderate (basic layout blocks and sorting) | Basic (bounding-box heuristics; poor LaTeX recovery) | Fast bitmap extraction, but lacks semantic figure/caption boundary detection | Very fast (<0.5s/doc); low memory (<50MB) | C-bindings, **AGPL-3.0 / Commercial** (licensing risk for permissive distribution) | Avoid as primary dependency due to AGPL licensing constraints. |
 | **`pdfplumber` / `pdfminer.six`** | Moderate (character-level bounding boxes) | Good for bordered tables; poor for LaTeX equations | Bounding-box coordinate extraction, but no semantic diagram categorization | Slow (pure Python parsing of glyph streams) | Pure Python, MIT license | Useful for targeted table extraction, but insufficient for unified layout + visual diagram extraction. |
 | **Marker** | High (surfaces clean Markdown with LaTeX equations) | High (heuristics + Nougat-derived vision models) | Extracts image blocks, but oriented strictly toward single-file markdown | Moderate–Slow; requires PyTorch + HuggingFace checkpoints | Heavy PyTorch, GPL-3.0 / restrictive licenses on certain model weights | Powerful for academic markdown, but less modular for granular object-level figure/caption pairing. |
 | **Grobid** | High (specifically trained on academic preprints: TEI-XML) | Moderate for math; excellent for bibliographic metadata | Basic figure coordinate detection in TEI-XML | Fast (Java daemon), but requires persistent background process | Java 17+ server requirement; Docker container needed | Too heavy operational burden for a local-first, single-binary Python CLI. |
-| **Docling** *(Proposed)* | **Superior** (DocLayNet-trained layout models, unified JSON document model) | **Superior** (TableFormer for complex tables, native LaTeX formula recognition) | **Native visual asset cropping**, figure-caption association, bounding-box provenance | Moderate (runs local ONNX / PyTorch models; ~1–3s/page CPU, sub-second on GPU) | Python native, **MIT License**, modular backend (Docling-core + Docling) | **Adopt as Tier 2 (Preferred Engine)** via `pip install .[docling]`. |
+| **Docling** *(Adopted)* | **Superior** (DocLayNet-trained layout models, unified JSON document model) | **Superior** (TableFormer for complex tables, native LaTeX formula recognition) | **Native visual asset cropping**, figure-caption association, bounding-box provenance | Moderate (runs local ONNX / PyTorch models; ~1–3s/page CPU, sub-second on GPU) | Python native, **MIT License**, modular backend (Docling-core + Docling) | **Adopt as the single document extraction engine** (no fallback or wrapper interface needed). |
 
 ### Why Docling Fits `yagrag`
 1. **Permissive Open-Source Licensing**: Docling is released under the MIT License by IBM Research, making it fully compatible with `yagrag`'s MIT license.
@@ -150,70 +150,25 @@ In accordance with `yagrag`'s strict core philosophy—**no LLM/VLM calls inside
 
 ## 5. Architectural Design & Implementation Plan
 
-### 5.1 Pluggable Extractor Interface in `kb`
-We define a clean abstract interface in `kb/store/extractors/base.py`:
+### 5.1 Direct Docling Integration in `kb`
+Rather than building an artificial custom wrapper or maintaining multiple tiered extractors, `yagrag` directly integrates Docling as its document extraction engine. This drastically simplifies the codebase:
+- No abstract base classes or plugin indirection.
+- No legacy `pypdf` fallback code paths.
+- Unified output structure: clean layout-preserving Markdown, structured AST, and cropped figures directly from Docling's pipeline.
 
-```python
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-
-@dataclass
-class ExtractedFigure:
-    fig_id: str
-    page: int
-    bbox: list[float]
-    caption: str
-    image_bytes: bytes
-    format: str = "png"
-
-@dataclass
-class ExtractionResult:
-    text: str
-    markdown: str
-    metadata: dict[str, Any]
-    figures: list[ExtractedFigure]
-    tables: list[dict[str, Any]]
-    raw_ast: dict[str, Any] | None = None
-
-class DocumentExtractor(ABC):
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier of the extractor (e.g., 'pypdf', 'docling')."""
-
-    @abstractmethod
-    def is_available(self) -> bool:
-        """Check if dependencies for this extractor are installed."""
-
-    @abstractmethod
-    def extract(self, path: Path, extract_figures: bool = True) -> ExtractionResult:
-        """Parse source document into structured text, markdown, and visual assets."""
-```
-
-### 5.2 Tiered Extractor Strategy
-1. **`DoclingExtractor` (`kb/store/extractors/docling.py`)**:
-   - Primary high-fidelity extractor.
-   - Requires `pip install .[docling]` (`docling>=2.0.0`).
-   - Uses PyTorch / ONNX for layout analysis, TableFormer for tables, and generates Markdown with LaTeX math syntax.
-   - Extracts cropped figures with coordinates and captions.
-2. **`PyPdfExtractor` (`kb/store/extractors/pypdf.py`)**:
-   - Zero-overhead fallback extractor.
-   - Fast, purely textual extraction. Returns empty figure list.
-   - Ensures `yagrag` installs cleanly in lightweight dev setups, containers, and minimal CI runners without GPU or PyTorch dependencies.
+### 5.2 Direct Docling Processing Pipeline
+- Uses Docling's layout analysis, TableFormer for tables, and generates Markdown with LaTeX math syntax.
+- Extracts cropped figures with coordinates and captions directly into `documents/cache/<doc_id>/figures/`.
+- If a document is pure Markdown or text, it is ingested directly without ML layout parsing.
 
 ### 5.3 Configuration via `kb.toml`
-The knowledge base configuration specifies extractor preferences:
+The knowledge base configuration specifies extraction parameters:
 
 ```toml
 [documents]
 raw = "documents/raw"
 synthesized = "documents/synthesized"
 cache = "documents/cache"
-# Extractor preference: "auto" (uses docling if installed, falls back to pypdf),
-# "docling", or "pypdf"
-extractor = "auto"
 extract_figures = true
 figure_dpi = 150
 ```
@@ -222,26 +177,22 @@ figure_dpi = 150
 
 ## 6. Migration & Rollout Strategy
 
-1. **Step 1: Extractor Interface & Caching Core**
-   - Create `kb/store/cache.py` managing `documents/cache/<doc_id>/`.
-   - Update `.gitignore` in repository template to ignore `documents/cache/`.
-   - Implement `DocumentExtractor` abstract base class and migrate existing `pypdf` logic into `PyPdfExtractor`.
-   - Wire `DocumentStore.extract_text` to check the cache before invoking the extractor.
+1. **Step 1: Cache Subsystem Core**
+   - Create `kb/store/cache.py` managing `documents/cache/<doc_id>/` (metadata invalidation, SHA-256 checks).
+   - Ensure `.gitignore` ignores `documents/cache/`.
+   - Wire `DocumentStore.extract_text` to check the cache before invoking Docling.
 
-2. **Step 2: Optional Dependency Packaging**
-   - Update `pyproject.toml` with optional dependencies:
-     ```toml
-     [project.optional-dependencies]
-     docling = ["docling>=2.0.0"]
-     all = ["traverse-embedded>=0.8.2", "fastembed>=0.3.0", "sympy>=1.12", "docling>=2.0.0"]
-     ```
+2. **Step 2: Dependency Packaging**
+   - Include `docling>=2.0.0` in dependencies.
+   - Deprecate and remove `pypdf`.
 
-3. **Step 3: Docling Implementation & Figure Export**
-   - Implement `DoclingExtractor`.
+3. **Step 3: Direct Docling Processing & Figure Export**
+   - Implement Docling extraction in `kb/store/documents.py`.
    - Export cropped diagrams to `documents/cache/<doc_id>/figures/`.
-   - Add CLI subcommands:
-     - `kb doc parse <id>`: Parse and populate cache.
+   - Add CLI subcommands and options:
+     - `kb doc text <id>`: Transparently parse and populate cache if not present.
      - `kb doc figures <id>`: List extracted figures and display caption metadata.
+     - `kb doc clean --cache`: Purge cached parse artifacts.
 
 4. **Step 4: Agent Skill Integration**
    - Update `.agents/skills/deep-knowledge-extraction/SKILL.md`:
@@ -252,7 +203,8 @@ figure_dpi = 150
 
 ## 7. Conclusion
 
-Adopting **Docling** as an optional high-fidelity extraction backend—coupled with a dedicated, git-ignored **cache directory** and **visual figure cropping**—resolves `yagrag`'s most prominent ingestion bottlenecks:
+Adopting **Docling** as the single, direct document extraction backend—coupled with a dedicated, git-ignored **cache directory** and **visual figure cropping**—resolves `yagrag`'s most prominent ingestion bottlenecks:
 - It eliminates the high latency of on-the-fly re-parsing.
 - It elevates text fidelity from plain ASCII streams to structured Markdown with preserved tables and LaTeX formulas.
+- It avoids unnecessary architectural overhead by skipping custom wrapper/fallback layers.
 - It opens the knowledge base to multimodal visual extraction, allowing agents to ground property-graph entities directly in the structural diagrams and factor graphs of scientific papers.
