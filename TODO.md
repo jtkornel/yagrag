@@ -10,21 +10,20 @@ Directly actionable items ready for implementation:
   * **Candidate Review & Interactive Output**: Emit structured candidate duplicate pairs/bundles for agent or user review, and support idempotent execution via `kb graph dedupe --apply`.
 * **Reference**: Candidate 2 in [`docs/comparison_yagrag_kggen.md`](docs/comparison_yagrag_kggen.md).
 
-## 2. Improved Document & Diagram Extraction Subsystem
-* **Goal**: Replace on-the-fly, un-cached `pypdf` extraction with a tiered extractor architecture, intermediate caching, and visual figure/diagram extraction for agent VLM inspection.
+## 2. [x] Improved Document & Diagram Extraction Subsystem (Completed)
+* **Goal**: Replace on-the-fly, un-cached document extraction with a direct Docling-based extraction engine, intermediate caching, and visual figure/diagram extraction for agent VLM inspection.
 * **Scope**:
+  * **Direct Docling Integration (No Fallback / No Custom Wrapper Interface)**:
+    * Use Docling directly as the single document extraction engine across the project.
+    * No fallback extractor (e.g. `pypdf`) and no custom abstract wrapper/pluggable interface; Docling handles layout analysis, table extraction, LaTeX formula recovery, DocLayNet reading order, and figure/diagram cropping.
   * **Intermediate Cache Subsystem (`documents/cache/<doc_id>/`)**:
     * Store extracted layout-preserving Markdown (`content.md`), structured AST (`document.json`), and figures (`figures/`).
     * Cache invalidation via SHA-256 hash in `meta.json`.
     * Exclude `documents/cache/` from Git by default for copyright compliance.
     * Wire `DocumentStore.extract_text` and `kb index build` to read from cache when valid.
-  * **Pluggable Extractor Interface**:
-    * Abstract base class `DocumentExtractor` with `extract(path, extract_figures=True)`.
-    * **Tier 1 (Fallback)**: Lightweight `PyPdfExtractor` retained for minimal environments and fast CI.
-    * **Tier 2 (High-Fidelity)**: `DoclingExtractor` packaged as optional dependency (`pip install .[docling]`), providing table extraction, LaTeX formula recovery, and DocLayNet reading order.
   * **Visual Diagram & Figure Cropping**:
-    * Deterministic figure/diagram bounding-box extraction and cropping to `.png` with sidecar metadata (caption, page, bbox).
-    * CLI commands: `kb doc parse <id>` and `kb doc figures <id>`.
+    * Deterministic figure/diagram bounding-box extraction and cropping to `.png` with sidecar metadata (caption, page, bbox) via Docling.
+    * Transparent caching on `kb doc text <id>` and visual inspection via `kb doc figures <id>`, with `kb doc clean --cache`.
   * **Agent Skill Integration**:
     * Update `deep-knowledge-extraction` skill to list figures and inspect diagrams (factor graphs, kinematic chains, block diagrams) using multimodal VLM capabilities to populate domain graph nodes.
 * **Reference**: Proposal in [`docs/proposal_document_and_diagram_extraction.md`](docs/proposal_document_and_diagram_extraction.md).

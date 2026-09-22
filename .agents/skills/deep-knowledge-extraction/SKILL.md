@@ -14,8 +14,11 @@ Trigger this skill when:
 
 ## Steps
 
-1.  **Read Text**: Run `kb doc text <id>` to retrieve the full content of the document.
-2.  **Identify Entities**: Scan the text for nodes matching the seed schema. Consult `schema/schema_companion.json` for per-type semantics and examples. Look for:
+1.  **Read Text & Extract Layout**:
+    *   Run `kb doc text <id>` to inspect document text (transparently triggers Docling parsing and caches markdown, JSON AST, and figures).
+    *   Run `kb doc figures <id>` to inspect visual assets (diagrams, flowcharts, system architectures, plots) extracted from the document.
+    *   **Visual Inspection (Multimodal Agent)**: If a diagram contains key architecture pipelines, sensor layouts, factor graph sketches, or benchmark charts not fully articulated in text, read the figure image file (under `documents/cache/<id>/figures/`) with your vision/multimodal capabilities to extract architectural entities, factor graph structures, or performance claims.
+2.  **Identify Entities**: Scan the text and extracted figures for nodes matching the seed schema. Consult `schema/schema_companion.json` for per-type semantics and examples. Look for:
     *   **Mathematical**: `Equation` (capture LaTeX and, where possible, a SymPy canonical form), `Quantity` (capture symbol, unit, and description; use `Quantity` for all physical parameters, measurements, state variables, as well as intermediate equation parameters, normalization factors, constants, and sub-expression symbols like $C$, $N$, $\theta_k$, $v_x$, $\omega_z$, $f_r$, $B_s$), `QuantityKind` (abstract quantity types like length/time, only when the text treats them generically), `Variable` (strictly reserved for discrete state vector slots in `FactorGraph` nodes).
     *   **Models**: `Model` (mathematical model as a whole), `MotionModel` (kinematics), `SensorModel` (observation), `NoiseModel` (parameters), `FactorGraph`, `Factor`.
     *   **Architecture**: `StateEstimator` (e.g., EKF, iSAM2), `Solver` (e.g., Levenberg-Marquardt), `Robot`, `Sensor`.

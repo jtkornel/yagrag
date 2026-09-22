@@ -810,10 +810,23 @@ def cmd_clean(
     apply: bool = typer.Option(
         False, "--apply", help="Apply cleanups to the graph database (default is dry-run)."
     ),
+    cache: bool = typer.Option(
+        False, "--cache", help="Clean all cached extracted documents and figures."
+    ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
-    """Audit and canonicalize document URLs, titles, and merge near-duplicate stubs."""
+    """Audit and canonicalize document URLs, titles, and merge near-duplicate stubs (or clean extraction cache)."""
+    if cache:
+        store = _open_store(kb, json_output)
+        purged = store.cache.clean_all()
+        res = {"cache_purged": True, "count": purged}
+        if json_output:
+            typer.echo(_json.dumps(res, indent=2))
+        else:
+            _console.print(f"[green]Purged extraction cache for {purged} document(s).[/green]")
+        return
+
     cfg = KBConfig.load(kb)
     db_path = kb / cfg.paths.graph_db
     if not db_path.exists():
@@ -1002,3 +1015,53 @@ def cmd_clean(
         _console.print(
             "[green]Everything is clean:[/green] 0 URL or title adjustments needed."
         )
+
+
+@doc_app.command("figures")
+def cmd_figures(
+    doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """List extracted figures and diagram PNGs with metadata for a document."""
+    store = _open_store(kb, json_output)
+    try:
+        rec = store.get(doc_id)
+    except StoreError as exc:
+        _fail(str(exc), json_output)
+        return
+
+    # If document hasn't been parsed yet, parse it first to populate cache
+    if not store.cache.is_valid(doc_id, rec.hash):
+        try:
+            store.parse_document(doc_id)
+        except StoreError as exc:
+            _fail(str(exc), json_output)
+            return
+
+    figures = store.cache.list_figures(doc_id)
+    fig_dicts = [
+        {
+            "id": fig.id,
+            "page": fig.page,
+            "bbox": fig.bbox,
+            "caption": fig.caption,
+            "image_path": fig.image_path,
+        }
+        for fig in figures
+    ]
+
+    if json_output:
+        typer.echo(_json.dumps({"id": doc_id, "figures": fig_dicts}, indent=2))
+        return
+
+    if not figures:
+        _console.print(f"[dim]No figures found for {doc_id}.[/dim]")
+        return
+
+    table = Table("Figure ID", "Page", "Caption", "Image Path")
+    for fig in figures:
+        caption_disp = (fig.caption[:50] + "...") if len(fig.caption) > 50 else (fig.caption or "[dim]No caption[/dim]")
+        table.add_row(fig.id, str(fig.page), caption_disp, fig.image_path)
+    _console.print(table)
+

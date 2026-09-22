@@ -12,12 +12,12 @@ dependencies = [
     "pydantic>=2.6.0",
     "tomli>=2.0.1; python_version < '3.11'",
     "traverse-embedded>=0.8.2",
+    "docling>=2.0.0",
 ]
 
 [project.optional-dependencies]
 graph = ["traverse-embedded>=0.8.2"]
 embed = ["fastembed>=0.3.0"]
-pdf = ["pypdf>=4.0.0"]
 math = ["sympy>=1.12"]
 dev = ["pytest>=8.0.0", "pytest-cov>=5.0.0", "ruff>=0.5.0"]
 
