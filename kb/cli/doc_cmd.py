@@ -1065,3 +1065,376 @@ def cmd_figures(
         table.add_row(fig.id, str(fig.page), caption_disp, fig.image_path)
     _console.print(table)
 
+
+def _ensure_docling_document(store: DocumentStore, doc_id: str, json_output: bool) -> tuple[Any, Any]:
+    """Helper to ensure document is parsed and return (rec, docling_doc)."""
+    try:
+        rec = store.get(doc_id)
+    except StoreError as exc:
+        _fail(str(exc), json_output)
+        raise AssertionError
+
+    if not store.cache.is_valid(doc_id, rec.hash):
+        try:
+            store.parse_document(doc_id)
+        except StoreError as exc:
+            _fail(str(exc), json_output)
+            raise AssertionError
+
+    doc = store.cache.read_docling_document(doc_id)
+    if doc is None:
+        _fail(f"no cached Docling AST found for document {doc_id!r}", json_output)
+        raise AssertionError
+
+    return rec, doc
+
+
+@doc_app.command("tables")
+def cmd_tables(
+    doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
+    index: int | None = typer.Option(None, "--index", "-i", help="Zero-based index of table to inspect."),
+    format_: str = typer.Option("md", "--format", help="Output format when inspecting: md | html | json."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Discover or inspect structured tables in a document."""
+    store = _open_store(kb, json_output)
+    _, doc = _ensure_docling_document(store, doc_id, json_output)
+
+    tables = getattr(doc, "tables", [])
+
+    if index is not None:
+        if index < 0 or index >= len(tables):
+            _fail(f"table index {index} out of range (document has {len(tables)} tables)", json_output)
+            return
+        tbl = tables[index]
+        p_no = 1
+        bbox_coords = []
+        if hasattr(tbl, "prov") and tbl.prov:
+            p_no = getattr(tbl.prov[0], "page_no", 1)
+            bb = getattr(tbl.prov[0], "bbox", None)
+            if bb is not None:
+                bbox_coords = [getattr(bb, "l", 0.0), getattr(bb, "t", 0.0), getattr(bb, "r", 0.0), getattr(bb, "b", 0.0)]
+        caption = getattr(tbl, "caption_text", lambda d: "")(doc) or ""
+        cref = getattr(tbl, "self_ref", None) or (tbl.get_ref().cref if hasattr(tbl, "get_ref") else f"#/tables/{index}")
+
+        # Render format
+        md_content = tbl.export_to_markdown(doc) if hasattr(tbl, "export_to_markdown") else ""
+        html_content = tbl.export_to_html(doc) if hasattr(tbl, "export_to_html") else ""
+        grid_data = [[cell.text for cell in row] for row in tbl.data.grid] if hasattr(tbl, "data") and hasattr(tbl.data, "grid") else []
+
+        if json_output or format_ == "json":
+            out_data = {
+                "id": doc_id,
+                "index": index,
+                "cref": cref,
+                "page": p_no,
+                "bbox": bbox_coords,
+                "caption": caption,
+                "rows": getattr(tbl.data, "num_rows", len(grid_data)),
+                "cols": getattr(tbl.data, "num_cols", len(grid_data[0]) if grid_data else 0),
+                "grid": grid_data,
+                "markdown": md_content,
+                "html": html_content,
+            }
+            typer.echo(_json.dumps(out_data, indent=2))
+            return
+
+        if format_ == "html":
+            typer.echo(html_content)
+        else:
+            typer.echo(md_content)
+        return
+
+    # List overview of tables
+    table_summaries = []
+    for idx, tbl in enumerate(tables):
+        p_no = 1
+        bbox_coords = []
+        if hasattr(tbl, "prov") and tbl.prov:
+            p_no = getattr(tbl.prov[0], "page_no", 1)
+            bb = getattr(tbl.prov[0], "bbox", None)
+            if bb is not None:
+                bbox_coords = [getattr(bb, "l", 0.0), getattr(bb, "t", 0.0), getattr(bb, "r", 0.0), getattr(bb, "b", 0.0)]
+        caption = getattr(tbl, "caption_text", lambda d: "")(doc) or ""
+        cref = getattr(tbl, "self_ref", None) or (tbl.get_ref().cref if hasattr(tbl, "get_ref") else f"#/tables/{idx}")
+        rows = getattr(tbl.data, "num_rows", 0)
+        cols = getattr(tbl.data, "num_cols", 0)
+        table_summaries.append({
+            "index": idx,
+            "cref": cref,
+            "page": p_no,
+            "bbox": bbox_coords,
+            "rows": rows,
+            "cols": cols,
+            "caption": caption,
+        })
+
+    if json_output:
+        typer.echo(_json.dumps({"id": doc_id, "tables": table_summaries}, indent=2))
+        return
+
+    if not table_summaries:
+        _console.print(f"[dim]No tables found for {doc_id}.[/dim]")
+        return
+
+    table_view = Table("Index", "Pointer", "Page", "Size", "Caption")
+    for s in table_summaries:
+        cap = (s["caption"][:50] + "...") if len(s["caption"]) > 50 else (s["caption"] or "[dim]No caption[/dim]")
+        table_view.add_row(str(s["index"]), s["cref"], str(s["page"]), f"{s['rows']}x{s['cols']}", cap)
+    _console.print(table_view)
+
+
+@doc_app.command("equations")
+def cmd_equations(
+    doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
+    index: int | None = typer.Option(None, "--index", "-i", help="Zero-based index of equation to view."),
+    page: int | None = typer.Option(None, "--page", "-p", help="Filter equations by page number."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Discover or extract isolated mathematical formulas from a document."""
+    store = _open_store(kb, json_output)
+    _, doc = _ensure_docling_document(store, doc_id, json_output)
+
+    # Collect formulas from iterate_items
+    formulas = []
+    for item, _ in doc.iterate_items():
+        if type(item).__name__ == "FormulaItem":
+            p_no = 1
+            bbox_coords = []
+            if hasattr(item, "prov") and item.prov:
+                p_no = getattr(item.prov[0], "page_no", 1)
+                bb = getattr(item.prov[0], "bbox", None)
+                if bb is not None:
+                    bbox_coords = [getattr(bb, "l", 0.0), getattr(bb, "t", 0.0), getattr(bb, "r", 0.0), getattr(bb, "b", 0.0)]
+            cref = getattr(item, "self_ref", None) or (item.get_ref().cref if hasattr(item, "get_ref") else "")
+            formulas.append({
+                "item": item,
+                "cref": cref,
+                "page": p_no,
+                "bbox": bbox_coords,
+                "text": getattr(item, "text", ""),
+            })
+
+    if page is not None:
+        formulas = [f for f in formulas if f["page"] == page]
+
+    for idx, f in enumerate(formulas):
+        f["index"] = idx
+
+    if index is not None:
+        if index < 0 or index >= len(formulas):
+            _fail(f"equation index {index} out of range ({len(formulas)} equation(s) available)", json_output)
+            return
+        f = formulas[index]
+        if json_output:
+            typer.echo(_json.dumps({
+                "id": doc_id,
+                "index": index,
+                "cref": f["cref"],
+                "page": f["page"],
+                "bbox": f["bbox"],
+                "latex": f["text"],
+            }, indent=2))
+            return
+        typer.echo(f["text"])
+        return
+
+    eq_summaries = [
+        {
+            "index": f["index"],
+            "cref": f["cref"],
+            "page": f["page"],
+            "bbox": f["bbox"],
+            "latex": f["text"],
+        }
+        for f in formulas
+    ]
+
+    if json_output:
+        typer.echo(_json.dumps({"id": doc_id, "equations": eq_summaries}, indent=2))
+        return
+
+    if not eq_summaries:
+        _console.print(f"[dim]No equations found for {doc_id}.[/dim]")
+        return
+
+    table_view = Table("Index", "Pointer", "Page", "LaTeX Formula")
+    for eq in eq_summaries:
+        text_disp = (eq["latex"][:60] + "...") if len(eq["latex"]) > 60 else eq["latex"]
+        table_view.add_row(str(eq["index"]), eq["cref"], str(eq["page"]), text_disp)
+    _console.print(table_view)
+
+
+@doc_app.command("outline")
+def cmd_outline(
+    doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
+    depth: int | None = typer.Option(None, "--depth", "-d", help="Maximum section nesting depth to display."),
+    items: bool = typer.Option(False, "--items", "-i", help="Include leaf items (tables, formulas, pictures) under sections."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Show the hierarchical document outline with JSON Pointer (cref) annotations."""
+    store = _open_store(kb, json_output)
+    _, doc = _ensure_docling_document(store, doc_id, json_output)
+
+    # Detect if TitleItem exists to offset SectionHeaderItem levels cleanly
+    has_title = any(type(item).__name__ == "TitleItem" for item, _ in doc.iterate_items())
+
+    root: dict[str, Any] = {"title": "Root", "level": 0, "cref": None, "page": 1, "items": [], "children": []}
+    stack: list[dict[str, Any]] = [root]
+
+    for item, _ in doc.iterate_items():
+        itype = type(item).__name__
+        cref = getattr(item, "self_ref", None) or (item.get_ref().cref if hasattr(item, "get_ref") else None)
+        p_no = 1
+        if hasattr(item, "prov") and item.prov:
+            p_no = getattr(item.prov[0], "page_no", 1)
+
+        if itype in ("TitleItem", "SectionHeaderItem"):
+            if itype == "TitleItem":
+                lvl = 1
+            else:
+                base_lvl = getattr(item, "level", 1)
+                lvl = base_lvl + 1 if has_title else base_lvl
+
+            node = {
+                "title": getattr(item, "text", ""),
+                "level": lvl,
+                "cref": cref,
+                "page": p_no,
+                "items": [],
+                "children": [],
+            }
+            while len(stack) > 1 and stack[-1]["level"] >= node["level"]:
+                stack.pop()
+            stack[-1]["children"].append(node)
+            stack.append(node)
+
+        elif itype in ("TableItem", "FormulaItem", "PictureItem"):
+            label = "table" if itype == "TableItem" else ("formula" if itype == "FormulaItem" else "picture")
+            summary = ""
+            if itype == "FormulaItem":
+                summary = getattr(item, "text", "")
+            elif itype == "TableItem":
+                summary = getattr(item, "caption_text", lambda d: "")(doc) or (
+                    f"{item.data.num_rows}x{item.data.num_cols} table" if hasattr(item, "data") else "Table"
+                )
+            elif itype == "PictureItem":
+                summary = getattr(item, "caption_text", lambda d: "")(doc) or "Picture"
+
+            stack[-1]["items"].append({
+                "label": label,
+                "cref": cref,
+                "page": p_no,
+                "summary": summary,
+            })
+
+    def _filter_depth(nodes: list[dict[str, Any]], current_depth: int) -> list[dict[str, Any]]:
+        filtered = []
+        for n in nodes:
+            entry: dict[str, Any] = {
+                "title": n["title"],
+                "level": n["level"],
+                "cref": n["cref"],
+                "page": n["page"],
+            }
+            if items:
+                entry["items"] = n["items"]
+            if depth is None or current_depth < depth:
+                entry["children"] = _filter_depth(n["children"], current_depth + 1)
+            else:
+                entry["children"] = []
+            filtered.append(entry)
+        return filtered
+
+    tree = _filter_depth(root["children"], 1)
+
+    if json_output:
+        typer.echo(_json.dumps({"id": doc_id, "outline": tree}, indent=2))
+        return
+
+    if not tree:
+        _console.print(f"[dim]No section headers found in {doc_id}.[/dim]")
+        return
+
+    def _render_text(nodes: list[dict[str, Any]], indent_level: int = 0) -> None:
+        prefix = "  " * indent_level
+        for n in nodes:
+            _console.print(f"{prefix}[bold]{n['title']}[/bold] [dim]\\[p.{n['page']}][/dim] [cyan]({n['cref']})[/cyan]")
+            if items and n.get("items"):
+                for itm in n["items"]:
+                    _console.print(f"{prefix}  [yellow]• {itm['label']}:[/yellow] {itm['summary']} [cyan]({itm['cref']})[/cyan]")
+            if n.get("children"):
+                _render_text(n["children"], indent_level + 1)
+
+    _render_text(tree)
+
+
+@doc_app.command("item")
+def cmd_item(
+    doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
+    cref: str = typer.Argument(..., help="RFC 6901 JSON pointer (e.g. #/tables/0, #/texts/4)."),
+    format_: str = typer.Option("text", "--format", help="Rendering format: text | md | html | json."),
+    kb: Path = _KB_OPT,
+    json_output: bool = _JSON_OPT,
+) -> None:
+    """Fetch and inspect a specific AST item by its JSON Pointer (cref)."""
+    from docling_core.types.doc.common.reference import RefItem
+
+    store = _open_store(kb, json_output)
+    _, doc = _ensure_docling_document(store, doc_id, json_output)
+
+    normalized_cref = cref.strip()
+    if not normalized_cref.startswith("#/"):
+        normalized_cref = "#/" + normalized_cref.lstrip("#/")
+
+    ref = RefItem(cref=normalized_cref)
+    try:
+        resolved = ref.resolve(doc)
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
+        _fail(f"could not resolve pointer {cref!r} in document {doc_id!r}: {exc}", json_output)
+        return
+
+    itype = type(resolved).__name__
+    p_no = 1
+    bbox_coords = []
+    if hasattr(resolved, "prov") and resolved.prov:
+        p_no = getattr(resolved.prov[0], "page_no", 1)
+        bb = getattr(resolved.prov[0], "bbox", None)
+        if bb is not None:
+            bbox_coords = [getattr(bb, "l", 0.0), getattr(bb, "t", 0.0), getattr(bb, "r", 0.0), getattr(bb, "b", 0.0)]
+
+    if json_output or format_ == "json":
+        data = resolved.model_dump() if hasattr(resolved, "model_dump") else str(resolved)
+        typer.echo(_json.dumps({
+            "id": doc_id,
+            "cref": normalized_cref,
+            "type": itype,
+            "page": p_no,
+            "bbox": bbox_coords,
+            "data": data,
+        }, indent=2))
+        return
+
+    if itype == "TableItem":
+        if format_ == "html" and hasattr(resolved, "export_to_html"):
+            typer.echo(resolved.export_to_html(doc))
+        elif hasattr(resolved, "export_to_markdown"):
+            typer.echo(resolved.export_to_markdown(doc))
+        else:
+            typer.echo(str(resolved))
+    elif itype == "FormulaItem":
+        typer.echo(getattr(resolved, "text", ""))
+    elif itype == "PictureItem":
+        cap = getattr(resolved, "caption_text", lambda d: "")(doc) or ""
+        _console.print(f"[bold]Picture Item[/bold] ({normalized_cref}) [dim]\\[Page {p_no}][/dim]")
+        if cap:
+            _console.print(f"Caption: {cap}")
+        if bbox_coords:
+            _console.print(f"BBox: {bbox_coords}")
+    else:
+        text = getattr(resolved, "text", "")
+        typer.echo(text or str(resolved))
+

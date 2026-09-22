@@ -46,6 +46,23 @@ Directly actionable items ready for implementation:
     * Update `.agents/skills/deep-knowledge-extraction/SKILL.md` to instruct the agent to resolve cross-document references to fine-grained target entities (or entity stubs), classifying them along the two decoupled axes (functional intent and evaluative attitude).
 * **Reference**: Proposal in [`docs/integrating_typed_claims_and_deep_references.md`](docs/integrating_typed_claims_and_deep_references.md).
 
+## 4. [x] Structural AST and JSON Pointer Tree Navigation in CLI (`kb doc tree`) (Completed)
+* **Goal**: Open up the cached Docling document AST (`document.json`) to agents via clean CLI commands, allowing selective discovery and extraction of tables, LaTeX equations, and section items via standard JSON Pointers (`cref`) without reading entire documents into the LLM context.
+* **Scope**:
+  * **Universal Docling Parsing Across All Formats**:
+    * Process `.md` and `.txt` through Docling at ingestion/parse time alongside `.pdf` to generate unified `DoclingDocument` ASTs (`document.json`) across all documents (raw and synthesized) without format-specific branching.
+  * **Section Outline & JSON Pointer Discovery (`kb doc outline <doc_id>`)**:
+    * Hierarchical outline command supporting `--items` and `--json` to expose sections, headings, page provenance, and item locations annotated with their native RFC 6901 JSON pointer (`cref`, e.g. `#/tables/0`, `#/texts/18`).
+  * **Isolated Table Extraction (`kb doc tables <doc_id>`)**:
+    * Table listing and index-based extraction supporting `--format [md|html|json]` to preserve complex multi-row/column structures without markdown-pipe degradation.
+  * **Isolated Equation Extraction (`kb doc equations <doc_id>`)**:
+    * Mathematical formula listing and extraction by index or page in clean LaTeX notation for direct population of `Equation.latex` graph nodes.
+  * **Direct Item Retrieval (`kb doc item <doc_id> <cref>`)**:
+    * Direct lookup of specific AST nodes by JSON pointer target discovered in the outline, outputting formatted content or raw AST dictionaries.
+  * **Agent Skill Integration**:
+    * Update `.agents/skills/deep-knowledge-extraction/SKILL.md` to recommend `kb doc outline` discovery followed by targeted `cref` point-lookups instead of loading full document markdown into context.
+* **Reference**: Proposal in [`docs/proposal_docling_ast_cli_tree.md`](docs/proposal_docling_ast_cli_tree.md).
+
 
 
 
