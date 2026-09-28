@@ -123,7 +123,7 @@ kb doc outline <doc_id> [OPTIONS]
 ```
 
 #### Options
-- `--depth <N>` / `-d <N>`: Maximum section nesting depth to display (default: all levels).
+- `--max-level <N>` / `-l <N>`: Maximum heading level to display (e.g. 1 for top-level headers only; default: all levels).
 - `--items` / `-i`: Include leaf items (equations, tables, pictures) under each section header with their `cref` pointers.
 - `--json`: Emit machine-readable tree with `cref`, section title, page number, and child pointers.
 

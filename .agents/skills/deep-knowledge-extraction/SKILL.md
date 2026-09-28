@@ -15,11 +15,11 @@ Trigger this skill when:
 ## Steps
 
 1.  **Read Text & Extract Layout**:
-    *   **Outline & Structure Discovery**: Run `kb doc outline <id> --items` to inspect the hierarchical section structure, pages, and discovered leaf items (tables, formulas, pictures) along with their JSON Pointer `cref` identifiers.
+    *   **Outline & Structure Discovery**: Run `kb doc outline <id> --items` to inspect the hierarchical section structure, pages, and discovered leaf items (tables, formulas, pictures) along with their JSON Pointer (RFC 6901) `cref` identifiers (e.g. `#/tables/0`, `#/texts/18`).
     *   **Targeted Item Extraction**: Fetch specific AST items without loading entire large texts into context:
         *   `kb doc tables <id>`: List all tables; inspect specific tables via `kb doc tables <id> -i <idx> [--format md|html|json]`.
         *   `kb doc equations <id>`: List isolated mathematical formulations with LaTeX representations; view specific formulas via `kb doc equations <id> -i <idx>`.
-        *   `kb doc item <id> <cref>`: Fetch any discovered AST node directly via its RFC 6901 pointer (e.g. `#/tables/0`, `#/texts/12`).
+        *   `kb doc item <id> <cref> [--header-only] [--format text|md|html|json]`: Fetch an individual AST node or an entire section by RFC 6901 JSON pointer (e.g. `kb doc item raw-0001 "#/tables/0"`, `kb doc item raw-0001 "#/texts/18"`, or section header `kb doc item raw-0001 "#/texts/1"`). When targeting a section heading, extracts all content up to the next heading. Use `--header-only` (`-H`) to view only the heading node itself.
     *   **Full Text & Visual Assets**:
         *   Run `kb doc text <id>` to inspect document text (transparently triggers Docling parsing and caches markdown, JSON AST, and figures).
         *   Run `kb doc figures <id>` to inspect visual assets (diagrams, flowcharts, system architectures, plots) extracted from the document.
