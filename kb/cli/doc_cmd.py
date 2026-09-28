@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import json as _json
+import re as _re
 from pathlib import Path
 from typing import Any, cast
 
@@ -1309,25 +1310,185 @@ def cmd_outline(
         "-l",
         help="Maximum heading level to display (e.g. 1 for top-level headers only).",
     ),
-    items: bool = typer.Option(False, "--items", "-i", help="Include leaf items (tables, formulas, pictures) under sections."),
+    items: bool = typer.Option(
+        True,
+        "--items/--no-items",
+        "-i/-I",
+        help="Show queryable items (paragraphs, tables, formulas, pictures) under sections (default: True).",
+    ),
+    consolidate: bool = typer.Option(
+        True,
+        "--consolidate/--no-consolidate",
+        "-c/-C",
+        help="Consolidate consecutive items (paragraphs and formulas) into range entries (default: True).",
+    ),
+    consolidate_figures: bool = typer.Option(
+        False,
+        "--consolidate-figures/--no-consolidate-figures",
+        help="Consolidate consecutive pictures/figures into range entries (default: False).",
+    ),
+    consolidate_tables: bool = typer.Option(
+        False,
+        "--consolidate-tables/--no-consolidate-tables",
+        help="Consolidate consecutive tables into range entries (default: False).",
+    ),
+    filter_items: str | None = typer.Option(
+        None,
+        "--filter-items",
+        "-f",
+        help="Comma-separated item types to hide (e.g. 'paragraph', 'formula', 'picture', 'table').",
+    ),
+    include_furniture: bool = typer.Option(
+        False,
+        "--include-furniture",
+        help="Include page headers, footers, and footnotes in the outline.",
+    ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
     """Show the hierarchical document outline with JSON Pointer (cref) annotations."""
+    from docling_core.types.doc.common.content_layer import ContentLayer
+
     store = _open_store(kb, json_output)
     _, doc = _ensure_docling_document(store, doc_id, json_output)
+
+    excluded_types = {t.strip().lower() for t in filter_items.split(",")} if filter_items else set()
 
     root: dict[str, Any] = {"title": "Root", "level": 0, "cref": None, "page": 1, "items": [], "children": []}
     stack: list[dict[str, Any]] = [root]
 
-    for item, _ in doc.iterate_items():
+    layers = {ContentLayer.BODY}
+    if include_furniture:
+        layers.add(ContentLayer.FURNITURE)
+
+    pending_items: list[dict[str, Any]] = []
+
+    def flush_pending() -> None:
+        nonlocal pending_items
+        if not pending_items:
+            return
+        target = stack[-1]["items"]
+        first = pending_items[0]
+        group_type = first["group_type"]
+
+        is_consolidated = False
+        if len(pending_items) > 1:
+            if group_type in ("paragraph", "formula") and consolidate:
+                is_consolidated = True
+            elif group_type == "picture" and consolidate_figures:
+                is_consolidated = True
+            elif group_type == "table" and consolidate_tables:
+                is_consolidated = True
+
+        if not is_consolidated:
+            for itm in pending_items:
+                lbl = itm["label"]
+                if lbl not in excluded_types:
+                    entry = {
+                        "label": lbl,
+                        "cref": itm["cref"],
+                        "page": itm["page"],
+                        "summary": itm["summary"],
+                    }
+                    if "words" in itm:
+                        entry["words"] = itm["words"]
+                    target.append(entry)
+        else:
+            # Plural label & filtering check
+            plural_label = {
+                "paragraph": "paragraphs",
+                "picture": "pictures",
+                "table": "tables",
+                "formula": "formulas",
+            }.get(group_type, f"{group_type}s")
+
+            if group_type not in excluded_types and plural_label not in excluded_types:
+                last = pending_items[-1]
+                count = len(pending_items)
+
+                if group_type == "paragraph":
+                    total_words = sum(p["words"] for p in pending_items)
+                    clean_initial = first["clean_text"]
+                    trunc = clean_initial[:35] + "..." if len(clean_initial) > 35 else clean_initial
+                    summary = f'"{trunc}" {total_words} words ({first["cref"]}) ... ({last["cref"]})'
+                    target.append({
+                        "label": plural_label,
+                        "cref": f"{first['cref']} ... {last['cref']}",
+                        "start_cref": first["cref"],
+                        "end_cref": last["cref"],
+                        "count": count,
+                        "words": total_words,
+                        "page": first["page"],
+                        "summary": summary,
+                    })
+                elif group_type == "picture":
+                    summary = f"{count} figures ({first['cref']}) ... ({last['cref']})"
+                    target.append({
+                        "label": plural_label,
+                        "cref": f"{first['cref']} ... {last['cref']}",
+                        "start_cref": first["cref"],
+                        "end_cref": last["cref"],
+                        "count": count,
+                        "page": first["page"],
+                        "summary": summary,
+                    })
+                elif group_type == "table":
+                    summary = f"{count} tables ({first['cref']}) ... ({last['cref']})"
+                    target.append({
+                        "label": plural_label,
+                        "cref": f"{first['cref']} ... {last['cref']}",
+                        "start_cref": first["cref"],
+                        "end_cref": last["cref"],
+                        "count": count,
+                        "page": first["page"],
+                        "summary": summary,
+                    })
+                elif group_type == "formula":
+                    first_num = first.get("eq_num")
+                    last_num = last.get("eq_num")
+                    if first_num and last_num:
+                        eq_span = f"eq. ({first_num}) ... eq. ({last_num})"
+                    elif first_num:
+                        eq_span = f"eq. ({first_num}) ... ({count} formulas)"
+                    else:
+                        eq_span = f"{count} formulas"
+                    summary = f"{eq_span} ({first['cref']}) ... ({last['cref']})"
+                    target.append({
+                        "label": plural_label,
+                        "cref": f"{first['cref']} ... {last['cref']}",
+                        "start_cref": first["cref"],
+                        "end_cref": last["cref"],
+                        "count": count,
+                        "page": first["page"],
+                        "summary": summary,
+                    })
+                else:
+                    for itm in pending_items:
+                        target.append({
+                            "label": itm["label"],
+                            "cref": itm["cref"],
+                            "page": itm["page"],
+                            "summary": itm["summary"],
+                        })
+        pending_items = []
+
+    def buffer_or_flush(item_dict: dict[str, Any]) -> None:
+        nonlocal pending_items
+        if pending_items and pending_items[0]["group_type"] != item_dict["group_type"]:
+            flush_pending()
+        pending_items.append(item_dict)
+
+    for item, _ in doc.iterate_items(included_content_layers=layers):
         itype = type(item).__name__
+        ilabel = getattr(item, "label", None)
+        lbl_str = ilabel.value if hasattr(ilabel, "value") else str(ilabel or "")
         cref = getattr(item, "self_ref", None) or (item.get_ref().cref if hasattr(item, "get_ref") else None)
         p_no = 1
         if hasattr(item, "prov") and item.prov:
             p_no = getattr(item.prov[0], "page_no", 1)
 
-        if itype in ("TitleItem", "SectionHeaderItem"):
+        if itype in ("TitleItem", "SectionHeaderItem") or lbl_str in ("section_header", "title"):
+            flush_pending()
             lvl = 1 if itype == "TitleItem" else ((getattr(item, "level", 1) or 1) + 1)
 
             node = {
@@ -1343,24 +1504,87 @@ def cmd_outline(
             stack[-1]["children"].append(node)
             stack.append(node)
 
-        elif itype in ("TableItem", "FormulaItem", "PictureItem"):
-            label = "table" if itype == "TableItem" else ("formula" if itype == "FormulaItem" else "picture")
-            summary = ""
-            if itype == "FormulaItem":
-                summary = getattr(item, "text", "") or getattr(item, "orig", "")
-            elif itype == "TableItem":
-                summary = getattr(item, "caption_text", lambda d: "")(doc) or (
-                    f"{item.data.num_rows}x{item.data.num_cols} table" if hasattr(item, "data") else "Table"
-                )
-            elif itype == "PictureItem":
-                summary = getattr(item, "caption_text", lambda d: "")(doc) or "Picture"
+        elif items:
+            raw_text = getattr(item, "text", "") or getattr(item, "orig", "") or ""
+            words = len(raw_text.split())
 
-            stack[-1]["items"].append({
-                "label": label,
-                "cref": cref,
-                "page": p_no,
-                "summary": summary,
-            })
+            if itype == "TableItem" or lbl_str == "table":
+                caption = getattr(item, "caption_text", lambda d: "")(doc)
+                dim = (
+                    f"{item.data.num_rows}x{item.data.num_cols} table"
+                    if hasattr(item, "data")
+                    else "table"
+                )
+                summary = f"{caption} ({dim})" if caption else dim
+                summary_clean = " ".join(summary.split())
+                if len(summary_clean) > 130:
+                    summary_clean = summary_clean[:127] + "..."
+                buffer_or_flush({
+                    "group_type": "table",
+                    "label": "table",
+                    "cref": cref,
+                    "page": p_no,
+                    "summary": summary_clean,
+                })
+            elif itype == "FormulaItem" or lbl_str == "formula":
+                m = _re.search(r"\((\d+(?:\.\d+)*)\)\s*$", raw_text) or _re.search(r"\((\d+(?:\.\d+)*)\)", raw_text)
+                eq_num = m.group(1) if m else None
+                summary = f"eq. ({eq_num})" if eq_num else "formula"
+                buffer_or_flush({
+                    "group_type": "formula",
+                    "label": "formula",
+                    "cref": cref,
+                    "page": p_no,
+                    "eq_num": eq_num,
+                    "summary": summary,
+                })
+            elif itype == "PictureItem" or lbl_str == "picture":
+                caption = getattr(item, "caption_text", lambda d: "")(doc)
+                summary = caption or "figure"
+                summary_clean = " ".join(summary.split())
+                if len(summary_clean) > 130:
+                    summary_clean = summary_clean[:127] + "..."
+                buffer_or_flush({
+                    "group_type": "picture",
+                    "label": "picture",
+                    "cref": cref,
+                    "page": p_no,
+                    "summary": summary_clean,
+                })
+            elif lbl_str == "caption":
+                # Captions are already displayed with their corresponding table/picture
+                continue
+            elif lbl_str in ("footnote", "page_header", "page_footer"):
+                flush_pending()
+                if not include_furniture:
+                    continue
+                label = lbl_str.replace("_", " ")
+                clean = " ".join(raw_text.split())
+                trunc = clean[:35] + "..." if len(clean) > 35 else clean
+                summary = f'"{trunc}" {words} words'
+                if label not in excluded_types:
+                    stack[-1]["items"].append({
+                        "label": label,
+                        "cref": cref,
+                        "page": p_no,
+                        "summary": summary,
+                    })
+            elif itype in ("TextItem", "ListItem") or lbl_str in ("text", "list_item"):
+                clean = " ".join(raw_text.split())
+                trunc = clean[:35] + "..." if len(clean) > 35 else clean
+                buffer_or_flush({
+                    "group_type": "paragraph",
+                    "label": "paragraph",
+                    "cref": cref,
+                    "page": p_no,
+                    "words": words,
+                    "clean_text": clean,
+                    "summary": f'"{trunc}" {words} words',
+                })
+            else:
+                continue
+
+    flush_pending()
 
     def _filter_level(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         filtered = []
@@ -1382,10 +1606,13 @@ def cmd_outline(
     tree = _filter_level(root["children"])
 
     if json_output:
-        typer.echo(_json.dumps({"id": doc_id, "outline": tree}, indent=2))
+        out_payload: dict[str, Any] = {"id": doc_id, "outline": tree}
+        if include_furniture and root["items"]:
+            out_payload["preamble_items"] = root["items"]
+        typer.echo(_json.dumps(out_payload, indent=2))
         return
 
-    if not tree:
+    if not tree and not (include_furniture and root["items"]):
         _console.print(f"[dim]No section headers found in {doc_id}.[/dim]")
         return
 
@@ -1395,9 +1622,16 @@ def cmd_outline(
             _console.print(f"{prefix}[bold]{n['title']}[/bold] [dim]\\[p.{n['page']}][/dim] [cyan]({n['cref']})[/cyan]")
             if items and n.get("items"):
                 for itm in n["items"]:
-                    _console.print(f"{prefix}  [yellow]• {itm['label']}:[/yellow] {itm['summary']} [cyan]({itm['cref']})[/cyan]")
+                    if itm["label"] in ("paragraphs", "pictures", "tables", "formulas"):
+                        _console.print(f"{prefix}  [yellow]• {itm['label']}:[/yellow] {itm['summary']}")
+                    else:
+                        _console.print(f"{prefix}  [yellow]• {itm['label']}:[/yellow] {itm['summary']} [cyan]({itm['cref']})[/cyan]")
             if n.get("children"):
                 _render_text(n["children"], indent_level + 1)
+
+    if include_furniture and root["items"]:
+        for itm in root["items"]:
+            _console.print(f"[yellow]• {itm['label']}:[/yellow] {itm['summary']} [cyan]({itm['cref']})[/cyan]")
 
     _render_text(tree)
 
