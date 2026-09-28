@@ -124,27 +124,38 @@ kb doc outline <doc_id> [OPTIONS]
 
 #### Options
 - `--max-level <N>` / `-l <N>`: Maximum heading level to display (e.g. 1 for top-level headers only; default: all levels).
-- `--items` / `-i`: Include leaf items (equations, tables, pictures) under each section header with their `cref` pointers.
+- `--items` / `--no-items` (`-i` / `-I`): Show/hide queryable leaf items under sections (default: `True`).
+- `--consolidate` / `--no-consolidate` (`-c` / `-C`): Consolidate contiguous sequences of paragraphs and formulas into compact range lines (default: `True`).
+- `--consolidate-figures / --no-consolidate-figures`: Consolidate consecutive pictures/figures into range lines (default: `False`).
+- `--consolidate-tables / --no-consolidate-tables`: Consolidate consecutive tables into range lines (default: `False`).
+- `--filter-items <types>` / `-f <types>`: Comma-separated item types to hide (e.g. `paragraph`, `formula`, `picture`, `table`).
+- `--include-furniture`: Include page headers, footers, and footnotes in the outline.
 - `--json`: Emit machine-readable tree with `cref`, section title, page number, and child pointers.
 
 #### Agent Workflow Example (CLI Text Display)
 ```bash
-$ kb doc outline raw-0001 --items
+$ kb doc outline raw-0001
 1. Introduction [p.1] (#/texts/0)
+  • paragraphs: "The field of autonomous mobile..." 278 words (#/texts/1) ... (#/texts/3)
+  • picture: Fig. 1: System overview (#/pictures/0)
 2. Related Work [p.2] (#/texts/5)
+  • paragraphs: "Previous methods in state estim..." 594 words (#/texts/6) ... (#/texts/10)
 3. Methodology [p.3] (#/texts/12)
    3.1 State Representation [p.3] (#/texts/15)
-       • formula: \mathbf{x}_{k} = \mathbf{f}(\mathbf{x}_{k-1}) (#/texts/18)
-       • formula: \mathbf{z}_{k} = \mathbf{h}(\mathbf{x}_k) (#/texts/21)
+       • paragraph: "We define the state vector as..." 65 words (#/texts/16)
+       • formulas: eq. (1) ... eq. (2) (#/texts/18) ... (#/texts/21)
    3.2 IMU Preintegration [p.4] (#/texts/25)
-       • formula: \Delta \mathbf{R}_{ij} = \prod \dots (#/texts/29)
-       • table: Runtime breakdown (#/tables/0)
+       • paragraph: "Following the manifold formulat..." 82 words (#/texts/26)
+       • formula: eq. (3) (#/texts/29)
+       • table: Runtime breakdown (4x3 table) (#/tables/0)
    3.3 Visual Factor Formulation [p.4] (#/texts/34)
-       • picture: Factor graph diagram (#/pictures/0)
+       • picture: (a) Sliding windows... (#/pictures/0)
+       • picture: (b) State trajectories... (#/pictures/1)
 4. Experimental Evaluation [p.6] (#/texts/45)
    4.1 EuRoC MAV Benchmark [p.6] (#/texts/48)
-       • table: Trajectory RMSE (m) (#/tables/1)
-       • picture: Trajectory error plots (#/pictures/1)
+       • table: Table 1. Technical details... (5x2 table) (#/tables/1)
+       • table: Table 2. Runtime metrics... (4x3 table) (#/tables/2)
+       • picture: Fig. 2: Trajectory error plots (#/pictures/3)
 5. Conclusion [p.8] (#/texts/60)
 ```
 

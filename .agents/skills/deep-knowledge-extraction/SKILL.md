@@ -15,7 +15,7 @@ Trigger this skill when:
 ## Steps
 
 1.  **Read Text & Extract Layout**:
-    *   **Outline & Structure Discovery**: Run `kb doc outline <id> --items` to inspect the hierarchical section structure, pages, and discovered leaf items (tables, formulas, pictures) along with their JSON Pointer (RFC 6901) `cref` identifiers (e.g. `#/tables/0`, `#/texts/18`).
+    *   **Outline & Structure Discovery**: Run `kb doc outline <id>` to inspect the hierarchical section structure, pages, and queryable items (paragraphs with word counts, tables with captions, formulas with equation numbering, pictures with captions) along with their JSON Pointer (RFC 6901) `cref` identifiers (e.g. `#/tables/0`, `#/texts/18`). Consecutive paragraphs and formulas are consolidated into compact range entries by default (disable with `--no-consolidate` / `-C`), while tables and figures remain individually listed with captions (consolidate optionally with `--consolidate-tables` / `--consolidate-figures`). Use `-f paragraph` to focus purely on non-text elements, `--no-items` (`-I`) for a pure heading outline, or `--include-furniture` to view page headers, footers, and footnotes.
     *   **Targeted Item Extraction**: Fetch specific AST items without loading entire large texts into context:
         *   `kb doc tables <id>`: List all tables; inspect specific tables via `kb doc tables <id> -i <idx> [--format md|html|json]`.
         *   `kb doc equations <id>`: List isolated mathematical formulations with LaTeX representations; view specific formulas via `kb doc equations <id> -i <idx>`.
