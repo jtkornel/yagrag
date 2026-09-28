@@ -1371,14 +1371,14 @@ def cmd_outline(
         first = pending_items[0]
         group_type = first["group_type"]
 
-        is_consolidated = False
-        if len(pending_items) > 1:
-            if group_type in ("paragraph", "formula") and consolidate:
-                is_consolidated = True
-            elif group_type == "picture" and consolidate_figures:
-                is_consolidated = True
-            elif group_type == "table" and consolidate_tables:
-                is_consolidated = True
+        is_consolidated = (
+            len(pending_items) > 1
+            and (
+                (group_type in ("paragraph", "formula") and consolidate)
+                or (group_type == "picture" and consolidate_figures)
+                or (group_type == "table" and consolidate_tables)
+            )
+        )
 
         if not is_consolidated:
             for itm in pending_items:

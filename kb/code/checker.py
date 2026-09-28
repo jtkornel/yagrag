@@ -401,17 +401,19 @@ def _normalize_math_symbol_variants(s: str) -> set[str]:
             variants.add(clean_no_sub.replace(g_from, g_to))
 
     # Time-index / step aliases: e.g. k-1, i-1 <-> prev; k+1, i+1 <-> next
+    step_aliases: set[str] = set()
     for v in variants:
         if "-1" in v or "_1" in v:
-            variants.add(re.sub(r"[_\-]1$", "_prev", v))
-            variants.add(re.sub(r"[a-z0-9]+[_\-]1$", "prev", v))
-            variants.add(re.sub(r"[a-z0-9]+-1$", "_prev", v))
+            step_aliases.add(re.sub(r"[_\-]1$", "_prev", v))
+            step_aliases.add(re.sub(r"[a-z0-9]+[_\-]1$", "prev", v))
+            step_aliases.add(re.sub(r"[a-z0-9]+-1$", "_prev", v))
         if "+1" in v or "_plus_1" in v:
-            variants.add(re.sub(r"[_\+]+1$", "_next", v))
-            variants.add(re.sub(r"[a-z0-9]+[_\+]+1$", "next", v))
-            variants.add(re.sub(r"[a-z0-9]+\+1$", "_next", v))
+            step_aliases.add(re.sub(r"[_\+]+1$", "_next", v))
+            step_aliases.add(re.sub(r"[a-z0-9]+[_\+]+1$", "next", v))
+            step_aliases.add(re.sub(r"[a-z0-9]+\+1$", "_next", v))
+    variants.update(step_aliases)
 
-    variants.update({v.lower() for v in list(variants)})
+    variants.update({v.lower() for v in variants})
     return {v for v in variants if v}
 
 
