@@ -1267,10 +1267,48 @@ def cmd_equations(
     _console.print(table_view)
 
 
+def _render_ast_item(item: Any, doc: Any, format_: str = "text") -> str:
+    """Format an individual Docling AST item to string according to desired format."""
+    itype = type(item).__name__
+    if itype == "TableItem":
+        if format_ == "html" and hasattr(item, "export_to_html"):
+            return item.export_to_html(doc)
+        elif hasattr(item, "export_to_markdown"):
+            return item.export_to_markdown(doc)
+        return str(item)
+    elif itype == "FormulaItem":
+        eq = getattr(item, "text", "") or getattr(item, "orig", "")
+        if not eq:
+            return ""
+        if format_ == "md":
+            return f"\n$$\n{eq}\n$$\n"
+        return eq
+    elif itype == "PictureItem":
+        cap = getattr(item, "caption_text", lambda d: "")(doc) or ""
+        cref = getattr(item, "self_ref", None) or ""
+        if format_ == "md":
+            return f"\n![{cap}]({cref})\n" if cap else f"\n![Picture]({cref})\n"
+        return f"[Picture: {cap}]" if cap else "[Picture]"
+    elif itype in ("SectionHeaderItem", "TitleItem"):
+        text = getattr(item, "text", "")
+        if format_ == "md":
+            lvl = 1 if itype == "TitleItem" else ((getattr(item, "level", 1) or 1) + 1)
+            prefix = "#" * max(1, min(6, lvl))
+            return f"{prefix} {text}"
+        return text
+    else:
+        return getattr(item, "text", "") or str(item)
+
+
 @doc_app.command("outline")
 def cmd_outline(
     doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
-    depth: int | None = typer.Option(None, "--depth", "-d", help="Maximum section nesting depth to display."),
+    max_level: int | None = typer.Option(
+        None,
+        "--max-level",
+        "-l",
+        help="Maximum heading level to display (e.g. 1 for top-level headers only).",
+    ),
     items: bool = typer.Option(False, "--items", "-i", help="Include leaf items (tables, formulas, pictures) under sections."),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
@@ -1278,9 +1316,6 @@ def cmd_outline(
     """Show the hierarchical document outline with JSON Pointer (cref) annotations."""
     store = _open_store(kb, json_output)
     _, doc = _ensure_docling_document(store, doc_id, json_output)
-
-    # Detect if TitleItem exists to offset SectionHeaderItem levels cleanly
-    has_title = any(type(item).__name__ == "TitleItem" for item, _ in doc.iterate_items())
 
     root: dict[str, Any] = {"title": "Root", "level": 0, "cref": None, "page": 1, "items": [], "children": []}
     stack: list[dict[str, Any]] = [root]
@@ -1293,11 +1328,7 @@ def cmd_outline(
             p_no = getattr(item.prov[0], "page_no", 1)
 
         if itype in ("TitleItem", "SectionHeaderItem"):
-            if itype == "TitleItem":
-                lvl = 1
-            else:
-                base_lvl = getattr(item, "level", 1)
-                lvl = base_lvl + 1 if has_title else base_lvl
+            lvl = 1 if itype == "TitleItem" else ((getattr(item, "level", 1) or 1) + 1)
 
             node = {
                 "title": getattr(item, "text", ""),
@@ -1316,7 +1347,7 @@ def cmd_outline(
             label = "table" if itype == "TableItem" else ("formula" if itype == "FormulaItem" else "picture")
             summary = ""
             if itype == "FormulaItem":
-                summary = getattr(item, "text", "")
+                summary = getattr(item, "text", "") or getattr(item, "orig", "")
             elif itype == "TableItem":
                 summary = getattr(item, "caption_text", lambda d: "")(doc) or (
                     f"{item.data.num_rows}x{item.data.num_cols} table" if hasattr(item, "data") else "Table"
@@ -1331,9 +1362,11 @@ def cmd_outline(
                 "summary": summary,
             })
 
-    def _filter_depth(nodes: list[dict[str, Any]], current_depth: int) -> list[dict[str, Any]]:
+    def _filter_level(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         filtered = []
         for n in nodes:
+            if max_level is not None and n["level"] > max_level:
+                continue
             entry: dict[str, Any] = {
                 "title": n["title"],
                 "level": n["level"],
@@ -1342,14 +1375,11 @@ def cmd_outline(
             }
             if items:
                 entry["items"] = n["items"]
-            if depth is None or current_depth < depth:
-                entry["children"] = _filter_depth(n["children"], current_depth + 1)
-            else:
-                entry["children"] = []
+            entry["children"] = _filter_level(n["children"])
             filtered.append(entry)
         return filtered
 
-    tree = _filter_depth(root["children"], 1)
+    tree = _filter_level(root["children"])
 
     if json_output:
         typer.echo(_json.dumps({"id": doc_id, "outline": tree}, indent=2))
@@ -1377,10 +1407,16 @@ def cmd_item(
     doc_id: str = typer.Argument(..., help="Document id (e.g. raw-0001)."),
     cref: str = typer.Argument(..., help="RFC 6901 JSON pointer (e.g. #/tables/0, #/texts/4)."),
     format_: str = typer.Option("text", "--format", help="Rendering format: text | md | html | json."),
+    header_only: bool = typer.Option(
+        False,
+        "--header-only",
+        "-H",
+        help="Only extract the header node itself when referencing a section header (default: extract full section up to next heading).",
+    ),
     kb: Path = _KB_OPT,
     json_output: bool = _JSON_OPT,
 ) -> None:
-    """Fetch and inspect a specific AST item by its JSON Pointer (cref)."""
+    """Fetch and inspect a specific AST item or section by its JSON Pointer (cref)."""
     from docling_core.types.doc.common.reference import RefItem
 
     store = _open_store(kb, json_output)
@@ -1398,6 +1434,71 @@ def cmd_item(
         return
 
     itype = type(resolved).__name__
+
+    # If resolved item is a section header (or title) and not header_only, extract the section!
+    if itype in ("SectionHeaderItem", "TitleItem") and not header_only:
+        doc_items = list(doc.iterate_items())
+        target_idx = None
+        for i, (it, _) in enumerate(doc_items):
+            c = getattr(it, "self_ref", None) or (it.get_ref().cref if hasattr(it, "get_ref") else None)
+            if c == normalized_cref:
+                target_idx = i
+                break
+
+        section_items = [resolved]
+        if target_idx is not None:
+            for it, _ in doc_items[target_idx + 1:]:
+                it_type = type(it).__name__
+                if it_type in ("TitleItem", "SectionHeaderItem"):
+                    # Reached next heading - section boundary reached
+                    break
+                section_items.append(it)
+
+        if json_output or format_ == "json":
+            items_data = []
+            for it in section_items:
+                c = getattr(it, "self_ref", None) or (it.get_ref().cref if hasattr(it, "get_ref") else "")
+                p_no = 1
+                bbox_coords = []
+                if hasattr(it, "prov") and it.prov:
+                    p_no = getattr(it.prov[0], "page_no", 1)
+                    bb = getattr(it.prov[0], "bbox", None)
+                    if bb is not None:
+                        bbox_coords = [
+                            getattr(bb, "l", 0.0),
+                            getattr(bb, "t", 0.0),
+                            getattr(bb, "r", 0.0),
+                            getattr(bb, "b", 0.0),
+                        ]
+                data = it.model_dump() if hasattr(it, "model_dump") else str(it)
+                items_data.append({
+                    "cref": c,
+                    "type": type(it).__name__,
+                    "page": p_no,
+                    "bbox": bbox_coords,
+                    "data": data,
+                })
+            typer.echo(_json.dumps({
+                "id": doc_id,
+                "cref": normalized_cref,
+                "type": itype,
+                "items_count": len(section_items),
+                "items": items_data,
+            }, indent=2))
+            return
+
+        # Render formatted section text
+        rendered_pieces = []
+        for it in section_items:
+            chunk = _render_ast_item(it, doc, format_)
+            if chunk:
+                rendered_pieces.append(chunk)
+
+        separator = "\n\n" if format_ in ("md", "html") else "\n"
+        typer.echo(separator.join(rendered_pieces))
+        return
+
+    # Single leaf item (or header-only)
     p_no = 1
     bbox_coords = []
     if hasattr(resolved, "prov") and resolved.prov:
@@ -1426,7 +1527,8 @@ def cmd_item(
         else:
             typer.echo(str(resolved))
     elif itype == "FormulaItem":
-        typer.echo(getattr(resolved, "text", ""))
+        eq = getattr(resolved, "text", "") or getattr(resolved, "orig", "")
+        typer.echo(eq)
     elif itype == "PictureItem":
         cap = getattr(resolved, "caption_text", lambda d: "")(doc) or ""
         _console.print(f"[bold]Picture Item[/bold] ({normalized_cref}) [dim]\\[Page {p_no}][/dim]")
